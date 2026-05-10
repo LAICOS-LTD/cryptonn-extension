@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CryptONN Loader Installer v2.2
+# CryptONN Loader Installer v2.3
 # Usage: bash install.sh [--dir /opt/cryptonn] [--php /usr/bin/php] [--vhost /home/user/public_html]
 # Supports: cPanel (EasyApache 4), Plesk, DirectAdmin, bare Linux server
 # Requirements: PHP 7.2+, curl, bash
@@ -15,8 +15,8 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CDN_BASE="https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main"
-LOADER_VERSION="2.2"
+LOADER_URL="https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/cryptonn-loader.php"
+LOADER_VERSION="2.3"
 INSTALL_DIR="/opt/cryptonn"
 PHP_BIN=""
 TARGET_VHOST=""
@@ -44,7 +44,7 @@ detect_php() {
         [[ -x "$PHP_BIN" ]] || die "PHP binary not found: $PHP_BIN"
         return
     fi
-    for candidate in php php8.3 php8.2 php8.1 php8.0 php7.4 php7.3 php7.2; do
+    for candidate in php php8.5 php8.4 php8.3 php8.2 php8.1 php8.0 php7.4 php7.3 php7.2; do
         if command -v "$candidate" &>/dev/null; then
             PHP_BIN=$(command -v "$candidate")
             break
@@ -120,9 +120,8 @@ download_loader() {
     mkdir -p "$INSTALL_DIR"
     chmod 755 "$INSTALL_DIR"
 
-    local loader_url="${CDN_BASE}/releases/v${LOADER_VERSION}/cryptonn-loader.php"
-    curl -fsSL "$loader_url" -o "${INSTALL_DIR}/cryptonn-loader.php" \
-        || die "Failed to download loader from ${loader_url}"
+    curl -fsSL "$LOADER_URL" -o "${INSTALL_DIR}/cryptonn-loader.php" \
+        || die "Failed to download loader from ${LOADER_URL}"
 
     chmod 644 "${INSTALL_DIR}/cryptonn-loader.php"
     success "Loader downloaded to ${INSTALL_DIR}/cryptonn-loader.php"
@@ -251,7 +250,7 @@ print_instructions() {
     echo "    auto_prepend_file = ${INSTALL_DIR}/cryptonn-loader.php"
     echo ""
     echo "  Or add to your entry point (index.php):"
-    echo "    <?php require '${INSTALL_DIR}/cryptonn-loader.php';"
+    echo "    <?php require '/opt/cryptonn/cryptonn-loader.php';"
     echo ""
 }
 
