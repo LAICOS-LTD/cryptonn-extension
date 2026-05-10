@@ -1,0 +1,164 @@
+name: Build CryptONN Extension
+
+on:
+  push:
+    branches: [main]
+    tags:     ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: PHP ${{ matrix.php }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── x86_64 ───────────────────────────────────────────────────────
+          - { php: "7.2",  arch: x86_64,  runner: ubuntu-20.04 }
+          - { php: "7.3",  arch: x86_64,  runner: ubuntu-20.04 }
+          - { php: "7.4",  arch: x86_64,  runner: ubuntu-20.04 }
+          - { php: "8.0",  arch: x86_64,  runner: ubuntu-22.04 }
+          - { php: "8.1",  arch: x86_64,  runner: ubuntu-22.04 }
+          - { php: "8.2",  arch: x86_64,  runner: ubuntu-22.04 }
+          - { php: "8.3",  arch: x86_64,  runner: ubuntu-22.04 }
+          - { php: "8.4",  arch: x86_64,  runner: ubuntu-24.04 }
+          - { php: "8.5",  arch: x86_64,  runner: ubuntu-24.04 }
+          # ── aarch64 ──────────────────────────────────────────────────────
+          - { php: "7.2",  arch: aarch64, runner: ubuntu-20.04 }
+          - { php: "7.3",  arch: aarch64, runner: ubuntu-20.04 }
+          - { php: "7.4",  arch: aarch64, runner: ubuntu-20.04 }
+          - { php: "8.0",  arch: aarch64, runner: ubuntu-22.04 }
+          - { php: "8.1",  arch: aarch64, runner: ubuntu-22.04 }
+          - { php: "8.2",  arch: aarch64, runner: ubuntu-22.04 }
+          - { php: "8.3",  arch: aarch64, runner: ubuntu-22.04 }
+          - { php: "8.4",  arch: aarch64, runner: ubuntu-24.04 }
+          - { php: "8.5",  arch: aarch64, runner: ubuntu-24.04 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (aarch64 cross-build)
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install build dependencies (x86_64)
+        if: matrix.arch == 'x86_64'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential autoconf re2c bison \
+            libcurl4-openssl-dev libssl-dev libsodium-dev
+
+      - name: Install PHP ${{ matrix.php }} dev headers (x86_64)
+        if: matrix.arch == 'x86_64'
+        run: |
+          sudo add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
+          sudo apt-get update -qq
+          PHP_VER="${{ matrix.php }}"
+          sudo apt-get install -y --no-install-recommends \
+            "php${PHP_VER}" "php${PHP_VER}-dev" \
+            "php${PHP_VER}-curl" "php${PHP_VER}-sodium" || \
+          sudo apt-get install -y --no-install-recommends \
+            "php${PHP_VER}" "php${PHP_VER}-dev"
+
+      - name: Build extension (x86_64)
+        if: matrix.arch == 'x86_64'
+        working-directory: extension
+        run: |
+          PHP_VER="${{ matrix.php }}"
+          PHPIZE="phpize${PHP_VER}"
+          PHP_CONFIG="php-config${PHP_VER}"
+          command -v "$PHPIZE"    || PHPIZE=phpize
+          command -v "$PHP_CONFIG" || PHP_CONFIG=php-config
+
+          "$PHPIZE"
+          ./configure \
+            --enable-cryptonn \
+            --with-php-config="$PHP_CONFIG"
+          make -j$(nproc)
+
+      - name: Build extension (aarch64 via Docker)
+        if: matrix.arch == 'aarch64'
+        run: |
+          PHP_VER="${{ matrix.php }}"
+          docker run --rm --platform linux/arm64 \
+            -v "${{ github.workspace }}/extension:/src" \
+            -w /src \
+            php:${PHP_VER}-cli-bullseye \
+            bash -c "
+              apt-get update -qq && \
+              apt-get install -y --no-install-recommends \
+                build-essential autoconf re2c bison \
+                libcurl4-openssl-dev libssl-dev libsodium-dev && \
+              phpize && \
+              ./configure --enable-cryptonn && \
+              make -j\$(nproc)
+            "
+
+      - name: Stage binary
+        run: |
+          PHP_VER="${{ matrix.php }}"
+          ARCH="${{ matrix.arch }}"
+          BINARY_NAME="cryptonn-php${PHP_VER/./}-${ARCH}.so"
+          mkdir -p dist
+          cp extension/modules/cryptonn.so "dist/${BINARY_NAME}"
+          echo "BINARY_NAME=${BINARY_NAME}" >> "$GITHUB_ENV"
+
+      - name: Generate SHA-256 checksum
+        run: |
+          cd dist
+          sha256sum "${{ env.BINARY_NAME }}" > "${{ env.BINARY_NAME }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cryptonn-php${{ matrix.php }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: List binaries
+        run: ls -lh dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## CryptONN Extension ${{ github.ref_name }}
+
+            ### Installation
+
+            ```bash
+            bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh)
+            ```
+
+            ### Supported versions
+            PHP 7.2 – 8.5 · x86_64 · aarch64
+
+            ### Verify checksum
+            ```bash
+            sha256sum -c cryptonn-phpXX-ARCH.so.sha256
+            ```
