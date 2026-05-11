@@ -4,15 +4,48 @@
 
 ---
 
-> **The CryptONN Loader is free and requires no license key.** Licensing operates at the encoding stage, not at the loader stage. Install once per server and it handles all protected applications automatically.
+> **The CryptONN Loader is free and requires no license key.** Licensing is enforced at the encoding stage, not the loader stage. Install once per server and it handles all protected applications automatically.
 
 ---
 
 ## What is CryptONN?
 
-CryptONN is a professional PHP source code protection and software licensing platform built for independent software vendors (ISVs) and development teams that distribute PHP applications commercially. It transforms PHP source files into an opaque, encrypted binary format that is fundamentally resistant to reverse engineering, decompilation, and unauthorized redistribution — while preserving full runtime performance and compatibility with standard PHP infrastructure.
+CryptONN is a professional PHP source code protection and software licensing platform built for independent software vendors (ISVs) and development teams that distribute PHP applications commercially. It transforms PHP source files into an opaque, AES-256-GCM encrypted binary format that is fundamentally resistant to reverse engineering, decompilation, and unauthorized redistribution — while preserving full runtime performance and compatibility with standard PHP infrastructure.
 
-The system consists of two components: the **CryptONN Encoder** (a desktop application used by the developer to protect PHP files) and the **CryptONN Loader** (this repository — a single PHP file installed on the end customer's server to transparently execute protected files).
+The system consists of two components: the **CryptONN Encoder** (a desktop application used by the developer to protect PHP files) and the **CryptONN Extension** (this repository — a native PHP extension installed on the end customer's server via a single installer script, with no manual configuration required).
+
+---
+
+## Quick Install
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh)
+```
+
+The installer automatically detects all installed PHP versions (Plesk, cPanel/EasyApache 4, DirectAdmin, bare Linux), downloads the correct `.so` binary for each version, installs it into the PHP extension directory, and adds `extension=cryptonn` to each `php.ini`. No manual configuration is required.
+
+**Supported environments:** Debian · Ubuntu · AlmaLinux · RHEL · CentOS · Plesk · cPanel/EasyApache 4 · DirectAdmin
+
+---
+
+## Installer Commands
+
+| Command | Description |
+|---|---|
+| `(none)` | Install or update to the latest version (default) |
+| `--install` | Force reinstall even if already up to date |
+| `--update` | Upgrade if a newer version is available |
+| `--uninstall` | Remove the extension from all PHP versions |
+| `--status` | Show installation status and version for each PHP |
+| `--help` | Show usage help |
+
+```bash
+# Check status and installed versions
+bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --status
+
+# Uninstall from all PHP versions
+bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --uninstall
+```
 
 ---
 
@@ -31,18 +64,17 @@ The system consists of two components: the **CryptONN Encoder** (a desktop appli
 ## How It Works
 
 **At encoding time** (developer's machine):
-A PHP file is processed by the CryptONN Encoder. The output is a `.cryptonn` binary file containing an encrypted payload and an embedded license identifier. The original PHP source code is not present in the output in any form.
+A PHP file is processed by the CryptONN Encoder. The output is a `.cryptonn` file — a valid PHP file containing a minimal stub header followed by an AES-256-GCM encrypted binary payload. The stub calls `__cnn_load()` (provided by the extension) with the file path and payload offset. The original PHP source code is not present in any readable form.
 
 **At runtime** (customer's server):
-1. PHP attempts to execute a `.cryptonn` file
-2. The Loader intercepts the execution via the PHP `auto_prepend_file` mechanism
-3. The Loader reads the embedded license identifier from the file header
-4. The Loader contacts the CryptONN licensing API, presenting the license identifier and a unique fingerprint derived from the server's network identity
-5. The API validates the license and returns a decryption key, encrypted specifically for this server
-6. The Loader decrypts the PHP payload entirely in memory
-7. The decrypted PHP code executes natively — no temporary files containing source code are retained on disk
+1. PHP executes a `.cryptonn` file normally (`include`, `require`, or direct invocation)
+2. The stub header runs: `__cnn_load(__FILE__, __COMPILER_HALT_OFFSET__)`
+3. The extension reads the embedded license identifier from the binary payload header
+4. The extension contacts the CryptONN licensing API, presenting the license identifier and a unique fingerprint derived from the server's network identity
+5. The API validates the license and returns a decryption key encrypted specifically for this server
+6. The extension decrypts the PHP payload in memory, executes it, and immediately removes the temporary execution file
 
-This flow is transparent to the end user and requires no modifications to the application's code structure.
+No `auto_prepend_file` configuration is required. The extension is loaded automatically by PHP at startup once `extension=cryptonn` is present in `php.ini`.
 
 ---
 
@@ -53,10 +85,10 @@ This flow is transparent to the end user and requires no modifications to the ap
 | **Keys stored on server** | None. No cryptographic keys are stored in the filesystem or environment. |
 | **Server binding** | Each server has a unique fingerprint derived from its network identity. A decryption bundle valid for one server is cryptographically useless on any other. |
 | **API communication** | All key delivery occurs over encrypted HTTPS channels. Keys are additionally encrypted with a server-specific wrapping key before transmission. |
-| **Offline tolerance** | A three-layer cache (in-process → file-based 24h → grace period 72h) ensures operation during temporary API outages. |
+| **Offline tolerance** | A three-layer cache (in-process → file-based 24 h → grace period 72 h) ensures operation during temporary API outages. |
 | **Trial enforcement** | Trial licenses enforce hard server-side expiry. No offline grace period applies — the API must confirm validity for trial licenses on every cache miss. |
 | **Tamper detection** | Truncated, modified, or corrupt `.cryptonn` files are detected and rejected before any decryption attempt. |
-| **No plaintext on disk** | Decrypted PHP code is never written to a persistent location. Temporary execution files are deleted immediately after use. |
+| **No plaintext on disk** | Decrypted PHP code is executed via a temporary file that is deleted immediately after use. |
 
 ---
 
@@ -71,8 +103,7 @@ This flow is transparent to the end user and requires no modifications to the ap
 | PHP 8.1 | ✅ Fully supported |
 | PHP 8.2 | ✅ Fully supported |
 | PHP 8.3 | ✅ Fully supported |
-| PHP 8.4 | ✅ Fully supported |
-| PHP 8.5 | ✅ Fully supported |
+| PHP 8.4 | 🔜 Planned |
 | PHP 5.x · 7.0 · 7.1 | ❌ Not supported |
 
 ---
@@ -81,172 +112,91 @@ This flow is transparent to the end user and requires no modifications to the ap
 
 | Component | Requirement | Notes |
 |---|---|---|
-| PHP | 7.2 – 8.5 | All minor versions supported |
-| ext-sodium | Any version | Bundled with PHP 7.2+ — no separate installation required on modern systems |
-| ext-openssl | Any version | Available by default on virtually all hosting environments |
+| PHP | 7.2 – 8.3 | All minor versions supported |
+| Architecture | x86_64 · aarch64 | Pre-built binaries for both |
+| bash | 4.0+ | Required by the installer script |
+| curl | Any | Used by installer to download binaries |
+| sha256sum | Any | Binary integrity verification |
 | Outbound HTTPS | Port 443 | Required for license validation API calls |
-| Disk (cache) | ~10 KB per active license | Temporary files in system temp directory |
-| APCu (optional) | Any version | Enables in-process caching; significantly reduces cold-start latency |
+| APCu (optional) | Any | Enables in-process caching; reduces cold-start latency |
 
 ---
 
-## Installation
-
-### Step 1 — Download the Loader
+## Verify Installation
 
 ```bash
-sudo mkdir -p /opt/cryptonn
-sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/cryptonn-loader.php \
-     -o /opt/cryptonn/cryptonn-loader.php
-sudo chmod 644 /opt/cryptonn/cryptonn-loader.php
-sudo chown root:root /opt/cryptonn/cryptonn-loader.php
+# Visual status table with version info
+bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --status
+
+# Quick CLI checks
+php -m | grep cryptonn
+php -r "echo phpversion('cryptonn');"
 ```
 
-### Step 2 — Configure PHP (choose your environment)
-
-**cPanel / EasyApache 4**
-```bash
-# Replace XX with your PHP version (e.g., ea-php82)
-echo "auto_prepend_file = /opt/cryptonn/cryptonn-loader.php" \
-  >> /opt/cpanel/ea-phpXX/root/etc/php.ini
-/scripts/restartsrv_apache
-/scripts/restartsrv_php_fpm
+Expected output:
 ```
-
-**Plesk / DirectAdmin — per-site `.user.ini`**
-```ini
-auto_prepend_file = /opt/cryptonn/cryptonn-loader.php
-```
-
-**Bare Metal — nginx + PHP-FPM pool config**
-```ini
-; /etc/php/8.x/fpm/pool.d/www.conf
-php_admin_value[auto_prepend_file] = /opt/cryptonn/cryptonn-loader.php
-```
-```bash
-systemctl restart php8.2-fpm
-```
-
-**Apache — `.htaccess` (per-directory)**
-```apache
-php_value auto_prepend_file /opt/cryptonn/cryptonn-loader.php
-```
-
-### Step 3 — Verify the Installation
-
-Save the following as `/tmp/cnn-verify.php` and run it:
-
-```php
-<?php
-echo defined('_CNN_MAGIC') ? "✅ CryptONN Loader: Active\n" : "❌ CryptONN Loader: Not loaded\n";
-echo "PHP Version : " . PHP_VERSION . "\n";
-echo "ext-sodium  : " . (extension_loaded('sodium')  ? "✅" : "❌ MISSING") . "\n";
-echo "ext-openssl : " . (extension_loaded('openssl') ? "✅" : "❌ MISSING") . "\n";
-echo "APCu        : " . (function_exists('apcu_store') ? "✅ Available" : "— Not available (optional)") . "\n";
-```
-
-```bash
-php /tmp/cnn-verify.php
-```
-
-Expected output on a correctly configured server:
-```
-✅ CryptONN Loader: Active
-PHP Version : 8.2.x
-ext-sodium  : ✅
-ext-openssl : ✅
-APCu        : ✅ Available
+cryptonn
+1.0.0
 ```
 
 ---
 
 ## Troubleshooting
 
-### `CryptONN Loader requires ext-sodium`
-**Cause:** The `sodium` PHP extension is not enabled for the active PHP version.
+### Extension not loading after install
 
 ```bash
-# cPanel / EasyApache 4
-/scripts/install_ea_metapackage ea-php82-php-sodium
+# Check that the extension appears in the module list
+php -m | grep cryptonn
 
-# AlmaLinux / RHEL / CentOS 8+
-dnf install php-sodium
+# Find the php.ini that PHP-FPM uses
+php-fpm8.2 -i | grep "Loaded Configuration"
 
-# Ubuntu / Debian
-apt-get install php8.2-sodium
+# Verify the directive is present
+grep cryptonn /etc/php/8.2/fpm/php.ini
+```
 
-# Verify
-php -m | grep sodium
+If the directive is present but the extension does not load, restart PHP-FPM:
+
+```bash
+systemctl restart plesk-php82-fpm   # Plesk
+/scripts/restartsrv_php_fpm         # cPanel
+systemctl restart php8.2-fpm        # bare Linux
 ```
 
 ---
 
-### `CryptONN Loader requires ext-openssl`
-**Cause:** The `openssl` extension is not enabled.
-
-Enable `extension=openssl` in the relevant `php.ini`, or install the `php-openssl` package via your package manager.
-
----
-
-### `Master key could not be retrieved`
-**Cause:** The Loader cannot reach the CryptONN licensing API. This may be caused by a firewall rule blocking outbound HTTPS, a DNS resolution failure, or a temporary network issue.
+### Cannot reach the licensing API
 
 ```bash
-# Diagnose connectivity
 curl -sv --max-time 10 https://api.laicos.com.tr/health
 ```
 
-**Solutions:**
-- Ensure outbound TCP port 443 is permitted from the server
-- Verify that the server can resolve external DNS names
-- If behind an egress proxy, configure the `CRYPTONN_API_URL` environment variable
+Ensure outbound TCP port 443 is permitted from the server and that external DNS names can be resolved. If an egress proxy is required, set the `CRYPTONN_API_URL` environment variable to point to the proxy.
 
 ---
 
 ### `Invalid magic bytes`
-**Cause:** The file is not a valid CryptONN-encoded file, or the file was corrupted during transfer (e.g., transferred in text mode instead of binary mode).
 
-**Solution:** Re-transfer the `.cryptonn` file in binary mode. Do not open or edit the file with a text editor. Request a fresh copy from the software vendor if corruption is suspected.
+The `.cryptonn` file is not a valid CryptONN-encoded file, or it was corrupted during transfer (transferred in text mode instead of binary, or opened with a text editor). Re-transfer the file in binary mode and request a fresh copy from the software vendor if corruption is suspected.
 
 ---
 
 ### `Incomplete header`
-**Cause:** The `.cryptonn` file is truncated — it was not transferred completely.
 
-**Solution:** Re-transfer the file. Verify available disk space on both the source and destination. Check for upload size limits in your web server or PHP configuration.
+The `.cryptonn` file is truncated — it was not transferred completely. Re-transfer the file and verify available disk space on both source and destination.
 
 ---
 
 ### `Decryption failed`
-**Cause:** The decryption key returned by the API does not match the file's encryption parameters. This typically indicates that the file was encoded with a different license than the one active on this server.
 
-**Solution:** Confirm with the software vendor that the correct license identifier was used when encoding the file.
-
----
-
-### `Temporary file could not be written`
-**Cause:** The PHP process does not have write permission to the system temporary directory or to the application's directory.
-
-**Solution:** Ensure the web server user has write access to `sys_get_temp_dir()` (typically `/tmp`). Check SELinux or AppArmor policies if running on a hardened system.
-
----
-
-### Loader is active but `.cryptonn` files are not executing
-**Possible causes:**
-- `auto_prepend_file` is not applying to the correct PHP SAPI (CLI vs. FPM)
-- A `.user.ini` file is being served from cache (`user_ini.cache_ttl` defaults to 300 seconds — wait and retry)
-- The application is invoking PHP files via `include`/`require` with a path that bypasses the prepend
-
-**Diagnosis:**
-```bash
-php -r "echo ini_get('auto_prepend_file');"
-```
+The API returned a key that does not match the file's encryption parameters. This typically means the file was encoded with a different license than the one currently active on this server. Contact the software vendor with the license identifier shown in the error.
 
 ---
 
 ## Performance
 
-The Loader is designed for negligible overhead on warm requests:
+The extension is designed for negligible overhead on warm requests:
 
 | Cache Layer | Typical Latency | Duration |
 |---|---|---|
@@ -261,39 +211,33 @@ APCu is used automatically when available. No configuration is required.
 
 ## Frequently Asked Questions
 
-**Q: Is the Loader free to use?**  
-A: Yes. The CryptONN Loader is free and open-source. There is no license key, subscription, or fee associated with installing it on any number of servers.
+**Q: Is the Loader free to use?**
+A: Yes. The CryptONN Extension is free and open-source. There is no license key, subscription, or fee associated with installing it on any number of servers.
 
-**Q: Does it work with PHP OPcache?**  
-A: Yes. OPcache operates on the PHP bytecode after the Loader has decrypted and executed the code. The interaction is fully transparent and correct.
+**Q: Does it work with PHP OPcache?**
+A: Yes. OPcache operates on the PHP bytecode after the extension has decrypted and executed the code. The interaction is fully transparent and correct.
 
-**Q: Can one Loader installation serve multiple applications?**  
-A: Yes. A single Loader installation handles all `.cryptonn` files on the server, across all applications and PHP versions that reference it via `auto_prepend_file`.
+**Q: Can one installation serve multiple applications?**
+A: Yes. A single extension installation handles all `.cryptonn` files on the server, across all applications and PHP versions where `extension=cryptonn` is active.
 
-**Q: What happens during an API outage?**  
-A: Non-trial licenses continue to operate normally for up to 72 hours using the file-based cache. Trial licenses require a successful API response on every cache miss — they do not benefit from the grace period.
+**Q: What happens during an API outage?**
+A: Non-trial licenses continue to operate normally for up to 72 hours using the file-based grace cache. Trial licenses require a successful API response on every cache miss — they do not benefit from the grace period.
 
-**Q: Is cached data a security risk?**  
-A: No. The cached bundle is encrypted with a key derived from the server's unique fingerprint. It cannot be decrypted on any other machine, and it does not contain the raw decryption key in any usable form.
+**Q: Is cached data a security risk?**
+A: No. The cached bundle is encrypted with a key derived from the server's unique fingerprint. It cannot be decrypted on any other machine.
 
-**Q: Can the Loader be used on shared hosting?**  
-A: Yes, provided the hosting environment permits `auto_prepend_file` to be set via `.user.ini` or `.htaccess`, and outbound HTTPS connections are allowed.
-
-**Q: Does CryptONN support wildcard or multi-domain licenses?**  
-A: License terms, domain restrictions, and deployment limits are managed through the CryptONN platform by the software vendor. Contact your software vendor for the terms applicable to your license.
+**Q: Can the extension be used on shared hosting?**
+A: It requires the ability to install a PHP extension (`.so` file) and write to `php.ini`. This is typically available on VPS and dedicated servers, Plesk, and cPanel environments. Standard shared hosting without extension installation rights is not supported.
 
 ---
 
-## Removing the Loader
+## Uninstall
 
-1. Remove the `auto_prepend_file` directive from `php.ini`, `.user.ini`, or `.htaccess`
-2. Restart PHP-FPM or Apache
-3. Delete the loader directory:
 ```bash
-rm -rf /opt/cryptonn
+bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --uninstall
 ```
 
-This does not affect any `.cryptonn` files — they simply revert to being unexecutable until a Loader is reinstalled.
+Removes `cryptonn.so` from all PHP extension directories, strips `extension=cryptonn` from each `php.ini`, and restarts PHP-FPM services automatically on Plesk. Existing `.cryptonn` files are not affected — they simply revert to being unexecutable until the extension is reinstalled.
 
 ---
 
