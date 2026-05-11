@@ -94,29 +94,29 @@ Een PHP-bestand wordt verwerkt door de CryptONN Encoder. De uitvoer is een `.cry
 
 ```bash
 sudo mkdir -p /opt/cryptonn
-sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh \
-     -o /opt/cryptonn/
-sudo chmod 644 /opt/cryptonn/
-sudo chown root:root /opt/cryptonn/
+sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-extension/main/cryptonn-loader.php \
+     -o /opt/cryptonn/cryptonn-loader.php
+sudo chmod 644 /opt/cryptonn/cryptonn-loader.php
+sudo chown root:root /opt/cryptonn/cryptonn-loader.php
 ```
 
 ### Stap 2 — PHP configureren (kies uw omgeving)
 
 **cPanel / EasyApache 4**
 ```bash
-echo "extension=cryptonn" \
+echo "auto_prepend_file = /opt/cryptonn/cryptonn-loader.php" \
   >> /opt/cpanel/ea-phpXX/root/etc/php.ini
 /scripts/restartsrv_apache && /scripts/restartsrv_php_fpm
 ```
 
 **Plesk / DirectAdmin — `.user.ini`**
 ```ini
-extension=cryptonn
+auto_prepend_file = /opt/cryptonn/cryptonn-loader.php
 ```
 
 **Dedicated server — PHP-FPM**
 ```ini
-php_admin_value[auto_prepend_file] = /opt/cryptonn/
+php_admin_value[auto_prepend_file] = /opt/cryptonn/cryptonn-loader.php
 ```
 ```bash
 systemctl restart php8.2-fpm
@@ -124,7 +124,7 @@ systemctl restart php8.2-fpm
 
 **Apache — `.htaccess`**
 ```apache
-php_value auto_prepend_file /opt/cryptonn/
+php_value auto_prepend_file /opt/cryptonn/cryptonn-loader.php
 ```
 
 ### Stap 3 — Installatie verifiëren
@@ -266,7 +266,7 @@ Dit heeft geen invloed op `.cryptonn`-bestanden — ze worden eenvoudigweg niet-
 | Kanaal | Link |
 |---|---|
 | Documentatie | [laicos.com.tr](https://laicos.com.tr) |
-| Issue-tracker | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-loader/issues) |
+| Issue-tracker | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-extension/issues) |
 
 ---
 
