@@ -214,7 +214,9 @@ install_for() {
     target="${extdir}/cryptonn.so"
 
     println ""
-    printf '  %s┌─ %sPHP %s%s  %s%s%s\n'      "$CC" "$CB$CW" "$ver" "$NC" "$CD" "$php" "$NC"
+    printf '  %s┌─ %sPHP %-3s%s ───────────────────────────────────────────%s\n' \
+        "$CC" "$CB$CW" "$ver" "$CC" "$NC"
+    printf '  %s│%s  %s%s%s\n'                 "$CC" "$NC" "$CD" "$php" "$NC"
     printf '  %s│%s  ext › %s%s%s\n'           "$CC" "$NC" "$CD" "$extdir" "$NC"
     printf '  %s│%s  ini › %s%s%s\n'           "$CC" "$NC" "$CD" "${ini:-not found}" "$NC"
     printf '  %s├─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
@@ -329,8 +331,9 @@ uninstall_for() {
     ini=$(php_ini "$php"); target="${extdir}/cryptonn.so"
 
     println ""
-    printf '  %s┌─ %sPHP %s%s  %s%s%s\n'      "$CC" "$CB$CW" "$ver" "$NC" "$CD" "$php" "$NC"
-    printf '  %s├─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
+    printf '  %s┌─ %sPHP %-3s%s ───────────────────────────────────────────%s\n' \
+        "$CC" "$CB$CW" "$ver" "$CC" "$NC"
+    printf '  %s│%s  %s%s%s\n'                 "$CC" "$NC" "$CD" "$php" "$NC"
 
     if [[ ! -f "$target" ]]; then
         printf '  %s│%s  %s  Not installed — nothing to do\n' "$CC" "$NC" "$SYM_IF"
@@ -381,12 +384,12 @@ cmd_uninstall() {
     println ""
     println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
     if (( ${#V_REMOVED[@]} > 0 )); then
-        println "${CC}║${NC}  ${CG}${CB}Uninstall complete!${NC}                                       ${CC}║${NC}"
+        println "${CC}║${NC}  ${CG}${CB}Uninstall complete!${NC}                                     ${CC}║${NC}"
         println "${CC}╠══════════════════════════════════════════════════════════╣${NC}"
         printf  "${CC}║${NC}  %s  Removed from %s%d%s PHP version(s):%-21s${CC}║${NC}\n" \
             "$SYM_OK" "$CB" "${#V_REMOVED[@]}" "$NC" ""
         for v in "${V_REMOVED[@]}"; do
-            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-41s${CC}║${NC}\n" "$v" ""
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-43s${CC}║${NC}\n" "$v" ""
         done
     else
         println "${CC}║${NC}  ${CY}Nothing was removed${NC}                                     ${CC}║${NC}"
