@@ -62,28 +62,28 @@ Das System besteht aus zwei Komponenten: dem **CryptONN Encoder** (Desktop-Anwen
 
 ```bash
 sudo mkdir -p /opt/cryptonn
-sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/cryptonn-loader.php \
-     -o /opt/cryptonn/cryptonn-loader.php
-sudo chmod 644 /opt/cryptonn/cryptonn-loader.php
+sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh \
+     -o /opt/cryptonn/
+sudo chmod 644 /opt/cryptonn/
 ```
 
 ### Schritt 2 — PHP konfigurieren
 
 **cPanel / EasyApache 4**
 ```bash
-echo "auto_prepend_file = /opt/cryptonn/cryptonn-loader.php" \
+echo "extension=cryptonn" \
   >> /opt/cpanel/ea-phpXX/root/etc/php.ini
 /scripts/restartsrv_apache && /scripts/restartsrv_php_fpm
 ```
 
 **Plesk / DirectAdmin — `.user.ini`**
 ```ini
-auto_prepend_file = /opt/cryptonn/cryptonn-loader.php
+extension=cryptonn
 ```
 
 **Bare Metal — PHP-FPM Pool**
 ```ini
-php_admin_value[auto_prepend_file] = /opt/cryptonn/cryptonn-loader.php
+php_admin_value[auto_prepend_file] = /opt/cryptonn/
 ```
 ```bash
 systemctl restart php8.2-fpm
@@ -91,7 +91,7 @@ systemctl restart php8.2-fpm
 
 **Apache — `.htaccess`**
 ```apache
-php_value auto_prepend_file /opt/cryptonn/cryptonn-loader.php
+php_value auto_prepend_file /opt/cryptonn/
 ```
 
 ### Schritt 3 — Installation überprüfen
