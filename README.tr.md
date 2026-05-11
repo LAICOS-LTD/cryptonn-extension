@@ -4,77 +4,45 @@
 
 ---
 
-> **CryptONN Loader tamamen ücretsizdir ve lisans anahtarı gerektirmez.** Lisanslama, yükleme aşamasında değil şifreleme aşamasında uygulanır. Sunucuya bir kez kurulduktan sonra tüm korumalı uygulamaları otomatik olarak yönetir.
+> **CryptONN Loader tamamen ücretsizdir ve herhangi bir lisans anahtarı gerektirmez.** Lisanslama süreci kodlama aşamasında gerçekleşir; Loader aşamasında herhangi bir ücret veya kısıtlama yoktur. Sunucuya bir kez kurulur, tüm korumalı uygulamaları otomatik olarak yönetir.
 
 ---
 
 ## CryptONN Nedir?
 
-CryptONN, PHP uygulamalarını ticari olarak dağıtan bağımsız yazılım satıcıları (ISV) ve geliştirme ekipleri için tasarlanmış profesyonel bir PHP kaynak kodu koruma ve yazılım lisanslama platformudur. PHP kaynak dosyalarını, tersine mühendisliğe, decompile işlemlerine ve yetkisiz dağıtıma karşı temelden dirençli, AES-256-GCM şifreli bir ikili formata dönüştürür; standart PHP altyapısıyla tam çalışma zamanı performansını ve uyumluluğu korur.
+CryptONN; PHP uygulamalarını ticari olarak dağıtan bağımsız yazılım geliştiricileri (ISV) ve geliştirme ekipleri için tasarlanmış profesyonel bir PHP kaynak kodu koruma ve yazılım lisanslama platformudur. PHP kaynak dosyalarını; tersine mühendislik, decompile ve yetkisiz kopyalamaya karşı yapısal olarak dayanıklı, şifreli bir ikili formata dönüştürür. Tüm bu koruma, standart PHP altyapısıyla tam uyumluluk ve sıfır performans kaybıyla sağlanır.
 
-Sistem iki bileşenden oluşur: **CryptONN Encoder** (geliştirici tarafından PHP dosyalarını korumak için kullanılan masaüstü uygulaması) ve **CryptONN Extension** (bu depo — tek bir kurulum scripti aracılığıyla müşteri sunucusuna kurulan, herhangi bir manuel yapılandırma gerektirmeyen yerel PHP eklentisi).
-
----
-
-## Hızlı Kurulum
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh)
-```
-
-Kurulum scripti; kurulu tüm PHP versiyonlarını otomatik olarak tespit eder (Plesk, cPanel/EasyApache 4, DirectAdmin, bare Linux), her versiyon için doğru `.so` ikili dosyasını indirir, PHP eklenti dizinine kurar ve her `php.ini` dosyasına `extension=cryptonn` ekler. Manuel yapılandırma gerekmez.
-
-**Desteklenen ortamlar:** Debian · Ubuntu · AlmaLinux · RHEL · CentOS · Plesk · cPanel/EasyApache 4 · DirectAdmin
+Sistem iki bileşenden oluşur: PHP dosyalarını korumak için geliştiricinin kullandığı **CryptONN Encoder** (masaüstü uygulaması) ve son müşterinin sunucusuna kurulan, korumalı dosyaların şeffaf biçimde çalıştırılmasını sağlayan **CryptONN Loader** (bu depo).
 
 ---
 
-## Script Komutları
+## Çözüm Üretilen Sorunlar
 
-| Komut | Açıklama |
+| Sorun | CryptONN'un Yaklaşımı |
 |---|---|
-| `(yok)` | En son versiyona kur veya güncelle (varsayılan) |
-| `--install` | Güncel olsa bile yeniden kur |
-| `--update` | Yeni versiyon varsa yükselt |
-| `--uninstall` | Tüm PHP versiyonlarından kaldır |
-| `--status` | Her PHP için kurulum durumunu ve versiyonu göster |
-| `--help` | Kullanım yardımını göster |
-
-```bash
-# Durum ve kurulu versiyonları kontrol et
-bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --status
-
-# Tüm PHP versiyonlarından kaldır
-bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --uninstall
-```
+| **Kaynak kod hırsızlığı** | PHP mantığı şifreli bir ikili yüke dönüştürülür. Dosya sistemine tam erişim sağlansa dahi orijinal kaynak kod geri elde edilemez. |
+| **Yetkisiz dağıtım** | Her korumalı dosya, sunucu tarafında doğrulanan gömülü bir lisans tanımlayıcısı taşır. Lisanssız sunuculara kopyalanan dosyalar çalışmayı reddeder. |
+| **Lisans süresi yönetimi** | Deneme süreleri ve son kullanma tarihleri lisanslama sunucusunda uygulanır. İstemci tarafında atlatılabilecek herhangi bir denetim mekanizması yoktur. |
+| **Çok müşterili dağıtım** | Aynı kod tabanı; her biri kendine özgü koşullara, kullanım limitine ve domain kısıtlamasına sahip birden fazla müşteriye lisanslanabilir. |
+| **Yetkisiz yeniden dağıtım** | Korumalı dosyalar belirli lisans tanımlayıcılarına bağlıdır; geçerli ve aktif bir lisans olmaksızın çalışmaz. |
 
 ---
 
-## Çözülen Problemler
+## Nasıl Çalışır?
 
-| Problem | CryptONN Nasıl Çözer |
-|---|---|
-| **Kaynak kod hırsızlığı** | PHP mantığı şifreli ikili yüke dönüştürülür. Tam dosya sistemi erişimiyle bile orijinal kaynak kodu yeniden oluşturulamaz. |
-| **Yetkisiz dağıtım** | Her korumalı dosya, sunucu tarafında doğrulanan gömülü bir lisans tanımlayıcı taşır. Lisanssız sunuculara kopyalanan dosyalar çalıştırılmayı reddeder. |
-| **Lisans süresi uygulaması** | Deneme süreleri ve son kullanma tarihleri lisanslama sunucusunda uygulanır. Atlatılabilecek istemci taraflı kontrol yoktur. |
-| **Çok kiracılı dağıtım** | Aynı kod tabanı, her biri benzersiz koşullara, kullanım limitine ve alan adı kısıtlamalarına sahip birden fazla müşteriye lisanslanabilir. |
-| **Yetkisiz yeniden dağıtım** | Korumalı dosyalar belirli lisans tanımlayıcılarına bağlıdır — aktif ve geçerli bir lisans olmadan işe yaramazlar. |
-
----
-
-## Nasıl Çalışır
-
-**Şifreleme sırasında** (geliştiricinin bilgisayarı):
-CryptONN Encoder bir PHP dosyasını işler ve çıktı olarak bir `.cryptonn` dosyası üretir — AES-256-GCM şifreli ikili yükü izleyen minimal bir stub başlığı içeren geçerli bir PHP dosyası. Stub, `__cnn_load()` fonksiyonunu (eklenti tarafından sağlanır) dosya yolu ve yük ofseti ile çağırır. Orijinal PHP kaynak kodu, dosyada hiçbir okunabilir formda bulunmaz.
+**Kodlama aşamasında** (geliştirici makinesi):
+Bir PHP dosyası CryptONN Encoder tarafından işlenir. Çıktı, şifreli bir yük ve gömülü lisans tanımlayıcısı içeren `.cryptonn` ikili dosyasıdır. Orijinal PHP kaynak kodu çıktı dosyasında hiçbir biçimde yer almaz.
 
 **Çalışma zamanında** (müşteri sunucusu):
-1. PHP, `.cryptonn` dosyasını normal şekilde çalıştırır (`include`, `require` veya doğrudan çağrı)
-2. Stub başlığı çalışır: `__cnn_load(__FILE__, __COMPILER_HALT_OFFSET__)`
-3. Eklenti, ikili yük başlığından gömülü lisans tanımlayıcısını okur
-4. Eklenti, lisans tanımlayıcısını ve sunucunun ağ kimliğinden türetilen benzersiz bir parmak izini sunarak CryptONN lisanslama API'sine başvurur
-5. API, lisansı doğrular ve bu sunucu için özel olarak şifrelenmiş bir şifre çözme anahtarı döner
-6. Eklenti, PHP yükünü bellekte çözer, çalıştırır ve geçici yürütme dosyasını hemen siler
+1. PHP bir `.cryptonn` dosyasını çalıştırmayı dener
+2. Loader, `auto_prepend_file` mekanizması aracılığıyla çalışmayı yakalar
+3. Loader, dosya başlığındaki gömülü lisans tanımlayıcısını okur
+4. Loader, CryptONN lisanslama API'sine; lisans tanımlayıcısını ve sunucunun ağ kimliğinden türetilen benzersiz parmak izini sunarak bağlanır
+5. API lisansı doğrular ve bu sunucuya özgü olarak şifrelenmiş bir şifre çözme anahtarı döner
+6. Loader, PHP yükünü tamamen bellek içinde çözer
+7. Çözülen PHP kodu doğrudan çalışır; diskte kaynak kod içeren geçici dosya bırakılmaz
 
-`auto_prepend_file` yapılandırması gerekmez. `extension=cryptonn` php.ini dosyasında mevcut olduğunda PHP başlangıçta eklentiyi otomatik olarak yükler.
+Bu akış son kullanıcıya tamamen şeffaftır ve uygulamanın kod yapısında herhangi bir değişiklik gerektirmez.
 
 ---
 
@@ -82,29 +50,30 @@ CryptONN Encoder bir PHP dosyasını işler ve çıktı olarak bir `.cryptonn` d
 
 | Özellik | Detay |
 |---|---|
-| **Sunucuda saklanan anahtarlar** | Yok. Dosya sisteminde veya ortamda kriptografik anahtar saklanmaz. |
-| **Sunucu bağlama** | Her sunucu, ağ kimliğinden türetilen benzersiz bir parmak izine sahiptir. Bir sunucu için geçerli olan şifre çözme paketi, başka bir sunucuda kriptografik olarak işe yaramaz. |
-| **API iletişimi** | Tüm anahtar dağıtımı şifreli HTTPS kanalları üzerinden gerçekleşir. Anahtarlar iletilmeden önce sunucuya özgü bir sarmalama anahtarıyla ek olarak şifrelenir. |
-| **Çevrimdışı toleransı** | Üç katmanlı önbellek (işlem içi → dosya tabanlı 24 sa → yetkisiz kullanım süresi 72 sa), geçici API kesintileri sırasında çalışmayı sağlar. |
-| **Deneme uygulaması** | Deneme lisansları katı sunucu taraflı son kullanma tarihini uygular. Deneme lisansları için yetkisiz kullanım süresi geçerli değildir — her önbellek kaçırmasında API başarılı yanıt vermelidir. |
-| **Kurcalama tespiti** | Kesilmiş, değiştirilmiş veya bozuk `.cryptonn` dosyaları herhangi bir şifre çözme girişiminden önce tespit edilir ve reddedilir. |
-| **Diskte düz metin yok** | Şifresi çözülen PHP kodu, kullanımdan hemen sonra silinen geçici bir dosya aracılığıyla yürütülür. |
+| **Sunucuda depolanan anahtar** | Hiçbiri. Dosya sisteminde veya ortamda hiçbir şifreleme anahtarı saklanmaz. |
+| **Sunucu bağlama** | Her sunucunun ağ kimliğinden türetilen benzersiz bir parmak izi vardır. Bir sunucu için geçerli olan şifre çözme paketi başka bir sunucuda kriptografik olarak işe yaramaz. |
+| **API iletişimi** | Tüm anahtar iletimi şifreli HTTPS kanalları üzerinden gerçekleşir. Anahtarlar iletimden önce sunucuya özgü sarmalama anahtarıyla ek olarak şifrelenir. |
+| **Çevrimdışı tolerans** | Üç katmanlı önbellekleme (bellek içi → dosya tabanlı 24 saat → tolerans süresi 72 saat), geçici API kesintilerinde kesintisiz çalışmayı sağlar. |
+| **Deneme lisansı uygulaması** | Deneme lisansları sunucu tarafında kesin son kullanma tarihini uygular. Deneme lisansları için çevrimdışı tolerans süresi uygulanmaz. |
+| **Değişiklik tespiti** | Kesilen, değiştirilen veya bozulan `.cryptonn` dosyaları herhangi bir şifre çözme girişiminden önce tespit edilerek reddedilir. |
+| **Diskte düz metin yok** | Şifresi çözülen PHP kodu hiçbir zaman kalıcı bir konuma yazılmaz. Geçici çalıştırma dosyaları kullanımın hemen ardından silinir. |
 
 ---
 
 ## PHP Uyumluluğu
 
-| PHP Versiyonu | Durum |
+| PHP Sürümü | Durum |
 |---|---|
-| PHP 7.2 | ✅ Tam destekleniyor |
-| PHP 7.3 | ✅ Tam destekleniyor |
-| PHP 7.4 | ✅ Tam destekleniyor |
-| PHP 8.0 | ✅ Tam destekleniyor |
-| PHP 8.1 | ✅ Tam destekleniyor |
-| PHP 8.2 | ✅ Tam destekleniyor |
-| PHP 8.3 | ✅ Tam destekleniyor |
-| PHP 8.4 | 🔜 Planlanıyor |
-| PHP 5.x · 7.0 · 7.1 | ❌ Desteklenmiyor |
+| PHP 7.2 | ✅ Tam desteklenir |
+| PHP 7.3 | ✅ Tam desteklenir |
+| PHP 7.4 | ✅ Tam desteklenir |
+| PHP 8.0 | ✅ Tam desteklenir |
+| PHP 8.1 | ✅ Tam desteklenir |
+| PHP 8.2 | ✅ Tam desteklenir |
+| PHP 8.3 | ✅ Tam desteklenir |
+| PHP 8.4 | ✅ Tam desteklenir |
+| PHP 8.5 | ✅ Tam desteklenir |
+| PHP 5.x · 7.0 · 7.1 | ❌ Desteklenmez |
 
 ---
 
@@ -112,132 +81,216 @@ CryptONN Encoder bir PHP dosyasını işler ve çıktı olarak bir `.cryptonn` d
 
 | Bileşen | Gereksinim | Notlar |
 |---|---|---|
-| PHP | 7.2 – 8.3 | Tüm alt versiyonlar destekleniyor |
-| Mimari | x86_64 · aarch64 | Her ikisi için önceden derlenmiş ikili dosyalar |
-| bash | 4.0+ | Kurulum scripti için gerekli |
-| curl | Herhangi | Scriptın ikili dosyaları indirmesi için |
-| sha256sum | Herhangi | İkili bütünlük doğrulaması |
-| Giden HTTPS | Port 443 | Lisans doğrulama API çağrıları için gerekli |
-| APCu (opsiyonel) | Herhangi | İşlem içi önbellekleme; soğuk başlatma gecikmesini azaltır |
+| PHP | 7.2 – 8.5 | Tüm minör sürümler desteklenir |
+| ext-sodium | Herhangi bir sürüm | PHP 7.2 ile birlikte gelir; modern sistemlerde ayrıca kurulumu gerekmez |
+| ext-openssl | Herhangi bir sürüm | Neredeyse tüm hosting ortamlarında varsayılan olarak mevcuttur |
+| Giden HTTPS | Port 443 | Lisans doğrulama API çağrıları için gereklidir |
+| Disk (önbellekleme) | Aktif lisans başına ~10 KB | Sistem geçici dizininde oluşturulan dosyalar |
+| APCu (opsiyonel) | Herhangi bir sürüm | Bellek içi önbelleklemeyi etkinleştirir; soğuk başlatma gecikmesini önemli ölçüde azaltır |
 
 ---
 
-## Kurulumu Doğrulama
+## Kurulum
+
+### Adım 1 — Loader'ı İndirin
 
 ```bash
-# Görsel durum tablosu
-bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --status
-
-# Hızlı CLI kontrolleri
-php -m | grep cryptonn
-php -r "echo phpversion('cryptonn');"
+sudo mkdir -p /opt/cryptonn
+sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-extension/main/cryptonn-loader.php \
+     -o /opt/cryptonn/cryptonn-loader.php
+sudo chmod 644 /opt/cryptonn/cryptonn-loader.php
+sudo chown root:root /opt/cryptonn/cryptonn-loader.php
 ```
 
-Beklenen çıktı:
+### Adım 2 — PHP'yi Yapılandırın (ortamınıza göre seçin)
+
+**cPanel / EasyApache 4**
+```bash
+# XX yerine PHP sürümünüzü yazın (ör. ea-php82)
+echo "auto_prepend_file = /opt/cryptonn/cryptonn-loader.php" \
+  >> /opt/cpanel/ea-phpXX/root/etc/php.ini
+/scripts/restartsrv_apache
+/scripts/restartsrv_php_fpm
 ```
-cryptonn
-1.0.0
+
+**Plesk / DirectAdmin — site bazında `.user.ini`**
+```ini
+auto_prepend_file = /opt/cryptonn/cryptonn-loader.php
+```
+
+**Bare Metal — nginx + PHP-FPM pool konfigürasyonu**
+```ini
+; /etc/php/8.x/fpm/pool.d/www.conf
+php_admin_value[auto_prepend_file] = /opt/cryptonn/cryptonn-loader.php
+```
+```bash
+systemctl restart php8.2-fpm
+```
+
+**Apache — `.htaccess` (dizin bazında)**
+```apache
+php_value auto_prepend_file /opt/cryptonn/cryptonn-loader.php
+```
+
+### Adım 3 — Kurulumu Doğrulayın
+
+Aşağıdaki içeriği `/tmp/cnn-dogrula.php` olarak kaydedin ve çalıştırın:
+
+```php
+<?php
+echo defined('_CNN_MAGIC') ? "✅ CryptONN Loader: Aktif\n" : "❌ CryptONN Loader: Yüklenmemiş\n";
+echo "PHP Sürümü  : " . PHP_VERSION . "\n";
+echo "ext-sodium  : " . (extension_loaded('sodium')  ? "✅" : "❌ EKSİK") . "\n";
+echo "ext-openssl : " . (extension_loaded('openssl') ? "✅" : "❌ EKSİK") . "\n";
+echo "APCu        : " . (function_exists('apcu_store') ? "✅ Mevcut" : "— Mevcut değil (opsiyonel)") . "\n";
+```
+
+```bash
+php /tmp/cnn-dogrula.php
+```
+
+Doğru yapılandırılmış bir sunucuda beklenen çıktı:
+```
+✅ CryptONN Loader: Aktif
+PHP Sürümü  : 8.2.x
+ext-sodium  : ✅
+ext-openssl : ✅
+APCu        : ✅ Mevcut
 ```
 
 ---
 
 ## Sorun Giderme
 
-### Kurulum sonrası eklenti yüklenmiyor
+### `CryptONN Loader requires ext-sodium`
+**Neden:** `sodium` PHP eklentisi etkin PHP sürümü için etkinleştirilmemiş.
 
 ```bash
-# Eklentinin modül listesinde görünüp görünmediğini kontrol et
-php -m | grep cryptonn
+# cPanel / EasyApache 4
+/scripts/install_ea_metapackage ea-php82-php-sodium
 
-# PHP-FPM'in kullandığı php.ini yolunu bul
-php-fpm8.2 -i | grep "Loaded Configuration"
+# AlmaLinux / RHEL / CentOS 8+
+dnf install php-sodium
 
-# Direktifin mevcut olduğunu doğrula
-grep cryptonn /etc/php/8.2/fpm/php.ini
-```
+# Ubuntu / Debian
+apt-get install php8.2-sodium
 
-Direktif mevcutsa ancak eklenti yüklenmiyorsa PHP-FPM'i yeniden başlatın:
-
-```bash
-systemctl restart plesk-php82-fpm   # Plesk
-/scripts/restartsrv_php_fpm         # cPanel
-systemctl restart php8.2-fpm        # bare Linux
+# Doğrulama
+php -m | grep sodium
 ```
 
 ---
 
-### Lisanslama API'sine erişilemiyor
+### `CryptONN Loader requires ext-openssl`
+**Neden:** `openssl` eklentisi etkin değil.
+
+**Çözüm:** İlgili `php.ini` dosyasında `extension=openssl` satırını etkinleştirin veya paket yöneticiniz aracılığıyla `php-openssl` paketini kurun.
+
+---
+
+### `Master key alınamadı`
+**Neden:** Loader, CryptONN lisanslama API'sine ulaşamıyor. Bu durum; giden HTTPS bağlantısını engelleyen bir güvenlik duvarı kuralından, DNS çözümleme hatasından veya geçici bir ağ sorundan kaynaklanıyor olabilir.
 
 ```bash
+# Bağlantıyı tanılayın
 curl -sv --max-time 10 https://api.laicos.com.tr/health
 ```
 
-Sunucudan giden TCP 443 portuna izin verildiğini ve sunucunun harici DNS adlarını çözebildiğini doğrulayın. Çıkış proxy'si gerekiyorsa `CRYPTONN_API_URL` ortam değişkenini ayarlayın.
+**Çözümler:**
+- Sunucudan giden TCP 443 portuna izin verildiğinden emin olun
+- Sunucunun harici DNS adlarını çözümleyebildiğini doğrulayın
+- Giden proxy arkasındaysa `CRYPTONN_API_URL` ortam değişkenini yapılandırın
 
 ---
 
 ### `Geçersiz magic bytes`
+**Neden:** Dosya geçerli bir CryptONN kodlu dosya değil ya da aktarım sırasında bozulmuş (örneğin metin modu yerine ikili modda aktarılmış).
 
-`.cryptonn` dosyası geçerli bir CryptONN kodlu dosya değil veya aktarım sırasında bozulmuş (metin modunda aktarılmış ya da bir metin düzenleyiciyle açılmış). Dosyayı ikili modda yeniden aktarın; bozulma şüpheleniliyorsa yazılım satıcısından yeni bir kopya isteyin.
+**Çözüm:** `.cryptonn` dosyasını ikili modda yeniden aktarın. Dosyayı bir metin düzenleyiciyle açmayın veya düzenlemeyin. Bozulma şüphesi varsa yazılım satıcısından yeni bir kopya isteyin.
 
 ---
 
 ### `Eksik header`
+**Neden:** `.cryptonn` dosyası kesik; tam olarak aktarılamamış.
 
-`.cryptonn` dosyası kesilmiş — tamamen aktarılmamış. Dosyayı yeniden aktarın ve kaynak ile hedefteki disk alanını doğrulayın.
+**Çözüm:** Dosyayı yeniden aktarın. Kaynak ve hedef disklerde yeterli alan olduğunu kontrol edin. Web sunucusu veya PHP yapılandırmanızdaki yükleme boyutu sınırlarını inceleyin.
 
 ---
 
 ### `Şifre çözme başarısız`
+**Neden:** API'den dönen şifre çözme anahtarı, dosyanın şifreleme parametreleriyle eşleşmiyor. Bu genellikle dosyanın bu sunucuda aktif olan lisanstan farklı bir lisansla kodlandığını gösterir.
 
-API, dosyanın şifreleme parametreleriyle eşleşmeyen bir anahtar döndürdü. Dosyanın bu sunucuda aktif olan lisanstan farklı bir lisansla kodlandığı anlamına gelir. Hatada gösterilen lisans tanımlayıcısıyla yazılım satıcısına başvurun.
+**Çözüm:** Dosyayı kodlarken doğru lisans tanımlayıcısının kullanıldığını yazılım satıcısıyla doğrulayın.
+
+---
+
+### `Geçici dosya yazılamadı`
+**Neden:** PHP işleminin sistem geçici dizinine veya uygulamanın dizinine yazma yetkisi yok.
+
+**Çözüm:** Web sunucusu kullanıcısının `sys_get_temp_dir()` (genellikle `/tmp`) dizinine yazma erişimi olduğundan emin olun. Güçlendirilmiş bir sistemde çalışıyorsanız SELinux veya AppArmor politikalarını kontrol edin.
+
+---
+
+### Loader aktif ama `.cryptonn` dosyaları çalışmıyor
+**Olası nedenler:**
+- `auto_prepend_file` doğru PHP SAPI'ye (CLI ve FPM) uygulanmıyor
+- `.user.ini` dosyası önbellekten sunuluyor (`user_ini.cache_ttl` varsayılan olarak 300 saniyedir — bekleyip tekrar deneyin)
+- Uygulama, PHP dosyalarını `include`/`require` ile prepend'i atlayan bir yol üzerinden çağırıyor
+
+**Tanılama:**
+```bash
+php -r "echo ini_get('auto_prepend_file');"
+```
 
 ---
 
 ## Performans
 
-Eklenti, sıcak isteklerde ihmal edilebilir ek yük için tasarlanmıştır:
+Loader, sıcak isteklerde ihmal edilebilir ek yük için tasarlanmıştır:
 
 | Önbellek Katmanı | Tipik Gecikme | Süre |
 |---|---|---|
-| İşlem içi (APCu) | < 0.1 ms | 1 saat |
-| Dosya önbelleği | < 0.5 ms | 24 saat |
-| API çağrısı (soğuk) | 50 – 200 ms | Önbellek kaçırmasında |
-| Yetkisiz kullanım süresi | < 0.5 ms | 72 saate kadar (deneme dışı) |
+| Bellek içi (APCu) | < 0,1 ms | 1 saat |
+| Dosya önbelleği | < 0,5 ms | 24 saat |
+| API çağrısı (soğuk) | 50 – 200 ms | Önbellek ıskalandığında |
+| Tolerans süresi | < 0,5 ms | 72 saate kadar (deneme dışı) |
 
-APCu mevcut olduğunda otomatik olarak kullanılır. Yapılandırma gerekmez.
-
----
-
-## Sıkça Sorulan Sorular
-
-**S: Loader ücretsiz mi?**
-A: Evet. CryptONN Extension ücretsiz ve açık kaynaklıdır. Herhangi bir sayıda sunucuya kurulmasıyla ilgili lisans anahtarı, abonelik veya ücret yoktur.
-
-**S: PHP OPcache ile çalışıyor mu?**
-A: Evet. OPcache, eklenti kodu çözüp çalıştırdıktan sonra PHP bayt kodu üzerinde çalışır. Etkileşim tamamen şeffaf ve doğrudur.
-
-**S: Tek bir kurulum birden fazla uygulamaya hizmet verebilir mi?**
-A: Evet. Tek bir eklenti kurulumu, `extension=cryptonn` aktif olan tüm PHP versiyonlarında, tüm uygulamalar genelinde sunucudaki tüm `.cryptonn` dosyalarını yönetir.
-
-**S: API kesintisinde ne olur?**
-A: Deneme dışı lisanslar, dosya tabanlı yetkisiz kullanım önbelleğini kullanarak 72 saate kadar normal şekilde çalışmaya devam eder. Deneme lisansları her önbellek kaçırmasında başarılı bir API yanıtı gerektirir — yetkisiz kullanım süresinden yararlanamazlar.
-
-**S: Önbelleğe alınan veri bir güvenlik riski mi?**
-A: Hayır. Önbelleğe alınan paket, sunucunun benzersiz parmak izinden türetilen bir anahtarla şifrelenir. Başka bir makinede çözümlenemez.
-
-**S: Paylaşımlı hostingde kullanılabilir mi?**
-A: PHP eklentisi (`.so` dosyası) kurma ve `php.ini` yazma yeteneği gerektirir. Bu genellikle VPS, dedicated sunucu, Plesk ve cPanel ortamlarında mevcuttur. Eklenti kurma yetkisi olmayan standart paylaşımlı hosting desteklenmez.
+APCu mevcut olduğunda otomatik olarak kullanılır. Herhangi bir yapılandırma gerekmez.
 
 ---
 
-## Kaldırma
+## Sık Sorulan Sorular
 
+**S: Loader kullanımı ücretli mi?**  
+C: Hayır. CryptONN Loader tamamen ücretsiz ve açık kaynaklıdır. Herhangi bir sayıda sunucuya kurulmasıyla ilişkili lisans anahtarı, abonelik veya ücret bulunmamaktadır.
+
+**S: PHP OPcache ile birlikte çalışıyor mu?**  
+C: Evet. OPcache, Loader kodun şifresini çözüp çalıştırdıktan sonra PHP bytecode üzerinde işlem yapar. Bu etkileşim tamamen şeffaf ve doğrudur.
+
+**S: Tek bir Loader kurulumu birden fazla uygulamaya hizmet verebilir mi?**  
+C: Evet. Tek bir Loader kurulumu, sunucudaki tüm `.cryptonn` dosyalarını tüm uygulamalar ve PHP sürümleri genelinde yönetir.
+
+**S: API kesintisinde ne olur?**  
+C: Deneme dışı lisanslar, son başarılı API çağrısından itibaren 72 saate kadar dosya tabanlı önbellekten normal şekilde çalışmaya devam eder. Deneme lisansları her önbellek ıskalanmasında başarılı bir API yanıtı gerektirir.
+
+**S: Önbelleklenen veriler güvenlik riski oluşturur mu?**  
+C: Hayır. Önbelleğe alınan paket, sunucunun benzersiz parmak izinden türetilen bir anahtarla şifrelenir. Başka bir makinede şifresi çözülemez ve kullanılabilir biçimde ham şifre çözme anahtarı içermez.
+
+**S: CryptONN paylaşımlı hostingde kullanılabilir mi?**  
+C: Evet; hosting ortamı `.user.ini` veya `.htaccess` aracılığıyla `auto_prepend_file` ayarlanmasına izin veriyorsa ve giden HTTPS bağlantılarına izin veriliyorsa kullanılabilir.
+
+---
+
+## Loader'ı Kaldırma
+
+1. `auto_prepend_file` direktifini `php.ini`, `.user.ini` veya `.htaccess` dosyasından kaldırın
+2. PHP-FPM veya Apache'yi yeniden başlatın
+3. Loader dizinini silin:
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh) --uninstall
+rm -rf /opt/cryptonn
 ```
 
-`cryptonn.so` dosyasını tüm PHP eklenti dizinlerinden kaldırır, her `php.ini` dosyasından `extension=cryptonn` satırını siler ve Plesk üzerinde PHP-FPM servislerini otomatik olarak yeniden başlatır. Mevcut `.cryptonn` dosyaları etkilenmez — eklenti yeniden kurulana kadar yürütülemez duruma gelirler.
+Bu işlem hiçbir `.cryptonn` dosyasını etkilemez; geçerli bir Loader yeniden kurulana kadar bu dosyalar çalışmayacaktır.
 
 ---
 
@@ -245,9 +298,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/m
 
 | Kanal | Bağlantı |
 |---|---|
-| Dokümantasyon | [docs.laicos.com.tr](https://laicos.com.tr) |
+| Dokümantasyon | [laicos.com.tr](https://laicos.com.tr) |
 | Ticari Lisanslama | [laicos.com.tr](https://laicos.com.tr) |
-| Sorun Takipçisi | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-loader/issues) |
+| Sorun Takibi | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-extension/issues) |
 
 ---
 
