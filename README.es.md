@@ -60,28 +60,28 @@ CryptONN es una plataforma profesional de protección de código fuente PHP y ge
 
 ```bash
 sudo mkdir -p /opt/cryptonn
-sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-loader/main/install.sh \
-     -o /opt/cryptonn/
-sudo chmod 644 /opt/cryptonn/
+sudo curl -fsSL https://raw.githubusercontent.com/LAICOS-LTD/cryptonn-extension/main/cryptonn-loader.php \
+     -o /opt/cryptonn/cryptonn-loader.php
+sudo chmod 644 /opt/cryptonn/cryptonn-loader.php
 ```
 
 ### Paso 2 — Configurar PHP
 
 **cPanel / EasyApache 4**
 ```bash
-echo "extension=cryptonn" \
+echo "auto_prepend_file = /opt/cryptonn/cryptonn-loader.php" \
   >> /opt/cpanel/ea-phpXX/root/etc/php.ini
 /scripts/restartsrv_apache && /scripts/restartsrv_php_fpm
 ```
 
 **Plesk / DirectAdmin — `.user.ini`**
 ```ini
-extension=cryptonn
+auto_prepend_file = /opt/cryptonn/cryptonn-loader.php
 ```
 
 **Servidor dedicado — PHP-FPM**
 ```ini
-php_admin_value[auto_prepend_file] = /opt/cryptonn/
+php_admin_value[auto_prepend_file] = /opt/cryptonn/cryptonn-loader.php
 ```
 ```bash
 systemctl restart php8.2-fpm
@@ -89,7 +89,7 @@ systemctl restart php8.2-fpm
 
 **Apache — `.htaccess`**
 ```apache
-php_value auto_prepend_file /opt/cryptonn/
+php_value auto_prepend_file /opt/cryptonn/cryptonn-loader.php
 ```
 
 ### Paso 3 — Verificar la instalación
@@ -176,7 +176,7 @@ rm -rf /opt/cryptonn
 | Canal | Enlace |
 |---|---|
 | Documentación | [laicos.com.tr](https://laicos.com.tr) |
-| Seguimiento de problemas | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-loader/issues) |
+| Seguimiento de problemas | [GitHub Issues](https://github.com/LAICOS-LTD/cryptonn-extension/issues) |
 
 ---
 
