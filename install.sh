@@ -101,13 +101,13 @@ VERSION_FILE="${INSTALL_DIR}/.version"
 
 # ── Header ────────────────────────────────────────────────────────────────────
 print_header() {
-    local HL="${CC}══════════════════════════════════════════════════════════${NC}"
-    local SP="                                                            "
+    # SP must be exactly 58 spaces (interior width = border ═ count)
+    local SP="                                                          "
     println ""
     println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
     println "${CC}║${NC}${SP}${CC}║${NC}"
-    println "${CC}║${NC}         ${CB}${CW}CryptONN Extension Installer${NC}               ${CC}║${NC}"
-    println "${CC}║${NC}         ${CD}v1.3.0  ·  LAICOS-LTD/cryptonn-loader${NC}          ${CC}║${NC}"
+    println "${CC}║${NC}               ${CB}${CW}CryptONN Extension Installer${NC}               ${CC}║${NC}"
+    println "${CC}║${NC}          ${CD}v1.3.0  ·  LAICOS-LTD/cryptonn-loader${NC}           ${CC}║${NC}"
     println "${CC}║${NC}${SP}${CC}║${NC}"
     println "${CC}╚══════════════════════════════════════════════════════════╝${NC}"
     println ""
@@ -409,10 +409,10 @@ cmd_status() {
         printf '%s  Could not reach GitHub\n' "$SYM_WN"
     fi
     println ""
-    printf '  %s┌──────────────┬──────────────┬────────────────────────┐%s\n' "$CC" "$NC"
-    printf '  %s│%s  %sPhP Version%s  %s│%s  %sInstalled%s     %s│%s  %sStatus%s                  %s│%s\n' \
+    printf '  %s┌────────────────┬────────────────┬──────────────────────────┐%s\n' "$CC" "$NC"
+    printf '  %s│%s  %sPhP Version%s   %s│%s  %sInstalled%s     %s│%s  %sStatus%s                  %s│%s\n' \
         "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC"
-    printf '  %s├──────────────┼──────────────┼────────────────────────┤%s\n' "$CC" "$NC"
+    printf '  %s├────────────────┼────────────────┼──────────────────────────┤%s\n' "$CC" "$NC"
 
     local any=0
     while IFS= read -r php; do
@@ -426,7 +426,7 @@ cmd_status() {
             else
                 stat_str="Up to date"; stat_col="$CG"
             fi
-            printf '  %s│%s  %-12s  %s│%s  %sv%-12s%s%s│%s  %s%-24s%s%s│%s\n' \
+            printf '  %s│%s  %-12s  %s│%s  %sv%-12s %s%s│%s  %s%-24s%s%s│%s\n' \
                 "$CC" "$NC" "PHP $ver" "$CC" "$NC" "$CG" "$cur_v" "$NC" "$CC" "$NC" \
                 "$stat_col" "$stat_str" "$NC" "$CC" "$NC"
         else
@@ -436,7 +436,7 @@ cmd_status() {
         (( any++ )) || true
     done < <(each_php)
 
-    printf '  %s└──────────────┴──────────────┴────────────────────────┘%s\n' "$CC" "$NC"
+    printf '  %s└────────────────┴────────────────┴──────────────────────────┘%s\n' "$CC" "$NC"
     (( any == 0 )) && warn "No PHP binaries found."
     println ""
 }
@@ -483,17 +483,17 @@ cmd_install() {
 verify_all() {
     sec "Verification"
     println ""
-    printf '  %s┌──────────────┬──────────────┬────────────────────────┐%s\n' "$CC" "$NC"
-    printf '  %s│%s  %sPHP Version%s  %s│%s  %sVersion%s       %s│%s  %sStatus%s                  %s│%s\n' \
+    printf '  %s┌────────────────┬────────────────┬──────────────────────────┐%s\n' "$CC" "$NC"
+    printf '  %s│%s  %sPHP Version%s   %s│%s  %sVersion%s       %s│%s  %sStatus%s                  %s│%s\n' \
         "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC"
-    printf '  %s├──────────────┼──────────────┼────────────────────────┤%s\n' "$CC" "$NC"
+    printf '  %s├────────────────┼────────────────┼──────────────────────────┤%s\n' "$CC" "$NC"
 
     while IFS= read -r php; do
         [[ -x "$php" ]] || continue; php_ok "$php" || continue
         local ver v
         ver=$(php_ver "$php"); v=$(ext_ver "$php")
         if [[ -n "$v" ]]; then
-            printf '  %s│%s  %-12s  %s│%s  %sv%-12s%s%s│%s  %s%-24s%s%s│%s\n' \
+            printf '  %s│%s  %-12s  %s│%s  %sv%-12s %s%s│%s  %s%-24s%s%s│%s\n' \
                 "$CC" "$NC" "PHP $ver" "$CC" "$NC" "$CG" "$v" "$NC" "$CC" "$NC" \
                 "$CG" "Loaded  ✔" "$NC" "$CC" "$NC"
         else
@@ -503,7 +503,7 @@ verify_all() {
         fi
     done < <(each_php)
 
-    printf '  %s└──────────────┴──────────────┴────────────────────────┘%s\n' "$CC" "$NC"
+    printf '  %s└────────────────┴────────────────┴──────────────────────────┘%s\n' "$CC" "$NC"
     println ""
 }
 
