@@ -1,82 +1,157 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════
-#  CryptONN Extension Installer v1.1.0
+#  CryptONN Extension Installer v1.2.0
 #  https://github.com/LAICOS-LTD/cryptonn-loader
 #
-#  Bu script CryptONN PHP extension (.so) dosyasını indirir, doğrular ve
-#  kurulumunu gerçekleştirir.  Aşağıdaki ortamları destekler:
-#
-#    • Bare Linux server (Debian, Ubuntu, AlmaLinux, RHEL, CentOS)
-#    • Plesk  (tüm kurulu PHP versiyonları otomatik bulunur)
+#  Downloads, verifies and installs the CryptONN PHP extension (.so).
+#  Supported environments:
+#    • Bare Linux server  (Debian, Ubuntu, AlmaLinux, RHEL, CentOS)
+#    • Plesk              (all installed PHP versions detected automatically)
 #    • cPanel / EasyApache 4
 #    • DirectAdmin
 #
-#  Kullanım:
-#    bash install.sh [seçenekler]
+#  Usage:
+#    bash install.sh [options]
 #
-#  Seçenekler:
-#    --php /usr/bin/php   Belirli bir PHP binary'si kullan
-#    --dir /opt/cryptonn  İndirme klasörü (varsayılan: /opt/cryptonn)
-#    --help               Bu yardım metnini göster
+#  Options:
+#    --php /usr/bin/php   Use a specific PHP binary
+#    --dir /opt/cryptonn  Download directory  (default: /opt/cryptonn)
+#    --help               Show this help
 #
-#  Gereksinimler: bash 4+, curl, sha256sum
+#  Requirements: bash 4+, curl, sha256sum
 #
-#  Lisans anahtarı GEREKMİYOR — extension tamamen ücretsizdir.
-#  Monetizasyon encoder tarafındadır; sunucuya sadece bu extension kurulur.
+#  No license key required — the extension is free to install.
+#  Monetisation is on the encoder side; the server only needs this extension.
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# ── Terminal renkleri ─────────────────────────────────────────────────────────
-RED='\033[0;31m'
-GRN='\033[0;32m'
-YLW='\033[1;33m'
-CYN='\033[0;36m'
-BLD='\033[1m'
-NC='\033[0m'
+# ── Colours & symbols ─────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'  GRN='\033[0;32m'  YLW='\033[1;33m'
+    CYN='\033[0;36m'  BLU='\033[0;34m'  MAG='\033[0;35m'
+    WHT='\033[1;37m'  DIM='\033[2m'     BLD='\033[1m'
+    NC='\033[0m'
+else
+    RED='' GRN='' YLW='' CYN='' BLU='' MAG='' WHT='' DIM='' BLD='' NC=''
+fi
 
-banner() { echo -e "\n${BLD}${CYN}── $* ──────────────────────────────────────${NC}"; }
-info()   { echo -e "  ${CYN}▸${NC} $*"; }
-ok()     { echo -e "  ${GRN}✔${NC} $*"; }
-warn()   { echo -e "  ${YLW}⚠${NC}  $*"; }
-die()    { echo -e "\n  ${RED}✖  HATA:${NC} $*\n" >&2; exit 1; }
-step()   { echo -e "  ${BLD}→${NC} $*"; }
+SYM_OK="✔"
+SYM_WARN="⚠"
+SYM_ERR="✖"
+SYM_ARR="›"
+SYM_DOT="•"
 
-# ── Varsayılanlar ─────────────────────────────────────────────────────────────
+# ── Layout helpers ────────────────────────────────────────────────────────────
+WIDTH=62
+
+_line() { # char
+    local c="${1:- }" out=""
+    for (( i=0; i<WIDTH; i++ )); do out+="$c"; done
+    echo "$out"
+}
+
+box_top()    { echo -e "${CYN}╔$(_line ═)╗${NC}"; }
+box_bot()    { echo -e "${CYN}╚$(_line ═)╝${NC}"; }
+box_sep()    { echo -e "${CYN}╠$(_line ═)╣${NC}"; }
+box_empty()  { echo -e "${CYN}║${NC}$(_line ' ')${CYN}║${NC}"; }
+
+box_row() {  # text  [color]
+    local txt="$1" col="${2:-$NC}"
+    local visible
+    # strip ANSI for length calculation
+    visible=$(echo -e "$txt" | sed 's/\x1b\[[0-9;]*m//g')
+    local pad=$(( WIDTH - ${#visible} ))
+    (( pad < 0 )) && pad=0
+    printf "${CYN}║${NC}${col}%s${NC}%${pad}s${CYN}║${NC}\n" "$txt" ""
+}
+
+box_center() { # text [color]
+    local txt="$1" col="${2:-$NC}"
+    local visible
+    visible=$(echo -e "$txt" | sed 's/\x1b\[[0-9;]*m//g')
+    local pad_total=$(( WIDTH - ${#visible} ))
+    local pad_l=$(( pad_total / 2 ))
+    local pad_r=$(( pad_total - pad_l ))
+    printf "${CYN}║${NC}%${pad_l}s${col}%s${NC}%${pad_r}s${CYN}║${NC}\n" "" "$txt" ""
+}
+
+section() { # title
+    echo ""
+    echo -e "${CYN}  ┌─ ${BLD}${WHT}$1${NC}${CYN} $(printf '─%.0s' $(seq 1 $(( WIDTH - ${#1} - 5 ))))${NC}"
+}
+
+ok()   { echo -e "  ${GRN}${SYM_OK}${NC}  $*"; }
+warn() { echo -e "  ${YLW}${SYM_WARN}${NC}  $*"; }
+die()  { echo -e "\n  ${RED}${SYM_ERR}  ERROR: $*${NC}\n" >&2; exit 1; }
+info() { echo -e "  ${DIM}${SYM_ARR}${NC}  $*"; }
+step() { echo -e "  ${BLU}${SYM_DOT}${NC}  ${BLD}$*${NC}"; }
+
+# ── Header banner ─────────────────────────────────────────────────────────────
+print_header() {
+    echo ""
+    box_top
+    box_empty
+    box_center "${BLD}${WHT}CryptONN Extension Installer${NC}"
+    box_center "${DIM}v1.2.0  —  https://cryptonn.com${NC}"
+    box_empty
+    box_bot
+    echo ""
+}
+
+# ── Defaults ──────────────────────────────────────────────────────────────────
 RELEASE_BASE="https://github.com/LAICOS-LTD/cryptonn-loader/releases/latest/download"
 INSTALL_DIR="/opt/cryptonn"
 FORCE_PHP=""
 PANEL=""
+declare -a INSTALLED_VERSIONS=()
+declare -a FAILED_VERSIONS=()
 
-# ── Argüman ayrıştırma ────────────────────────────────────────────────────────
+# ── Arguments ─────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --php|-p)  FORCE_PHP="$2";   shift 2 ;;
         --dir|-d)  INSTALL_DIR="$2"; shift 2 ;;
         --help|-h)
-            head -30 "$0" | grep -E "^#" | sed 's/^# \?//; s/^#//'
+            sed -n '2,26p' "$0" | sed 's/^# \?//; s/^#//'
             exit 0 ;;
-        *) die "Bilinmeyen argüman: $1  (--help ile kullanımı görün)" ;;
+        *) die "Unknown argument: $1  (use --help)" ;;
     esac
 done
 
-# ── Ön koşullar ───────────────────────────────────────────────────────────────
-[[ $EUID -eq 0 ]] || die "Bu script root ya da sudo ile çalıştırılmalıdır."
-command -v curl      &>/dev/null || die "curl kurulu değil. Kurun: apt/yum install curl"
-command -v sha256sum &>/dev/null || die "sha256sum bulunamadı."
-mkdir -p "$INSTALL_DIR" || die "Klasör oluşturulamadı: $INSTALL_DIR"
+# ── Pre-flight checks ─────────────────────────────────────────────────────────
+preflight() {
+    section "Pre-flight checks"
+    [[ $EUID -eq 0 ]] || die "Must be run as root (or with sudo)."
+    ok "Running as root"
 
-# ── CPU mimarisi ──────────────────────────────────────────────────────────────
+    command -v curl      &>/dev/null || die "curl is not installed.  Run: apt/yum install curl"
+    ok "curl found:      $(curl --version | head -1 | awk '{print $2}')"
+
+    command -v sha256sum &>/dev/null || die "sha256sum not found."
+    ok "sha256sum found"
+
+    mkdir -p "$INSTALL_DIR" || die "Cannot create directory: $INSTALL_DIR"
+    ok "Download dir:    ${INSTALL_DIR}"
+
+    ARCH=$(detect_arch)
+    ok "Architecture:    ${ARCH}"
+
+    PANEL=$(detect_panel)
+    ok "Control panel:   ${PANEL}"
+    echo ""
+}
+
+# ── Architecture ──────────────────────────────────────────────────────────────
 detect_arch() {
     case "$(uname -m)" in
         x86_64)        echo "x86_64"  ;;
         aarch64|arm64) echo "aarch64" ;;
-        *) die "Desteklenmeyen mimari: $(uname -m)  (x86_64 ve aarch64 desteklenir)" ;;
+        *) die "Unsupported architecture: $(uname -m)  (x86_64 and aarch64 supported)" ;;
     esac
 }
-ARCH=$(detect_arch)
 
-# ── PHP yardımcı fonksiyonları ────────────────────────────────────────────────
+# ── PHP helpers ───────────────────────────────────────────────────────────────
 php_ver()    { "$1" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null; }
 php_extdir() { "$1" -r 'echo ini_get("extension_dir");' 2>/dev/null; }
 php_ini()    { "$1" --ini 2>/dev/null | awk -F': ' '/Loaded Configuration/{gsub(/ /,"",$2); print $2}'; }
@@ -89,14 +164,13 @@ php_ok() {
     (( major > 7 || (major == 7 && minor >= 2) ))
 }
 
-# ── Tek PHP versiyonu için indirme + kurulum ──────────────────────────────────
+# ── Download + install for one PHP binary ─────────────────────────────────────
 install_for() {
     local php="$1"
-
-    [[ -x "$php" ]] || { warn "Yürütülebilir değil, atlanıyor: $php"; return 0; }
+    [[ -x "$php" ]] || { warn "Not executable, skipping: $php"; return 0; }
 
     if ! php_ok "$php"; then
-        warn "PHP $(php_ver "$php") < 7.2 desteklenmiyor, atlanıyor."
+        warn "PHP $(php_ver "$php") < 7.2 — not supported, skipping."
         return 0
     fi
 
@@ -111,224 +185,238 @@ install_for() {
     target="${extdir}/cryptonn.so"
 
     echo ""
-    step "PHP ${BLD}${ver}${NC} — ${php}"
-    info "Extension dizini : ${extdir}"
-    info "php.ini          : ${ini:-<bulunamadı>}"
+    echo -e "  ${CYN}┌─────────────────────────────────────────────────────${NC}"
+    echo -e "  ${CYN}│${NC}  ${BLD}${WHT}PHP ${ver}${NC}  ${DIM}${php}${NC}"
+    echo -e "  ${CYN}│${NC}  ${DIM}ext dir : ${extdir}${NC}"
+    echo -e "  ${CYN}│${NC}  ${DIM}php.ini : ${ini:-<not found>}${NC}"
+    echo -e "  ${CYN}└─────────────────────────────────────────────────────${NC}"
 
-    # Extension dizini kontrolü
+    # Extension dir check
     if [[ -z "$extdir" || ! -d "$extdir" ]]; then
-        warn "Extension dizini bulunamadı (${extdir}), PHP $ver atlanıyor."
+        warn "Extension directory not found (${extdir}), skipping PHP $ver."
+        FAILED_VERSIONS+=("$ver")
         return 0
     fi
 
-    # ── .so indir ─────────────────────────────────────────────────────────────
-    info "İndiriliyor: ${so_name} ..."
-    if ! curl -fsSL --connect-timeout 20 --retry 3 \
-            "${RELEASE_BASE}/${so_name}" -o "$so_path"; then
-        warn "${so_name} indirilemedi — bu PHP versiyonu için build mevcut olmayabilir."
+    # ── Download ──────────────────────────────────────────────────────────────
+    printf "     %-14s" "Downloading..."
+    if curl -fsSL --connect-timeout 20 --retry 3 \
+            "${RELEASE_BASE}/${so_name}" -o "$so_path" 2>/dev/null; then
+        local size
+        size=$(du -sh "$so_path" 2>/dev/null | cut -f1)
+        echo -e " ${GRN}${SYM_OK}${NC} ${so_name}  ${DIM}(${size})${NC}"
+    else
+        echo -e " ${RED}${SYM_ERR}${NC} Download failed"
         warn "URL: ${RELEASE_BASE}/${so_name}"
+        FAILED_VERSIONS+=("$ver")
         return 0
     fi
-    ok "İndirildi: ${so_name} ($(du -sh "$so_path" | cut -f1))"
 
-    # ── SHA-256 doğrulama ─────────────────────────────────────────────────────
+    # ── SHA-256 verify ────────────────────────────────────────────────────────
+    printf "     %-14s" "Verifying..."
     if curl -fsSL --connect-timeout 10 "${RELEASE_BASE}/${so_name}.sha256" \
             -o "$chk_path" 2>/dev/null; then
         local expected actual
         expected=$(cat "$chk_path" | tr -d '[:space:]')
         actual=$(sha256sum "$so_path" | awk '{print $1}')
         if [[ "$expected" == "$actual" ]]; then
-            ok "SHA-256 doğrulandı"
+            echo -e " ${GRN}${SYM_OK}${NC} SHA-256 OK  ${DIM}${actual:0:16}…${NC}"
+            rm -f "$chk_path"
         else
+            echo -e " ${RED}${SYM_ERR}${NC} Checksum mismatch!"
             rm -f "$so_path" "$chk_path"
-            warn "SHA-256 uyuşmazlığı! ${so_name} silindi, PHP $ver atlanıyor."
-            warn "  Beklenen : ${expected}"
-            warn "  Gerçek   : ${actual}"
+            warn "Expected : ${expected}"
+            warn "Got      : ${actual}"
+            FAILED_VERSIONS+=("$ver")
             return 0
         fi
-        rm -f "$chk_path"
     else
-        warn "Checksum dosyası indirilemedi — doğrulama atlandı."
+        echo -e " ${YLW}${SYM_WARN}${NC} Checksum unavailable — skipped"
     fi
 
-    # ── Extension dizinine kopyala ────────────────────────────────────────────
+    # ── Install .so ───────────────────────────────────────────────────────────
+    printf "     %-14s" "Installing..."
     if cp "$so_path" "$target" && chmod 644 "$target"; then
-        ok "Kuruldu: ${target}"
+        echo -e " ${GRN}${SYM_OK}${NC} ${target}"
     else
-        warn "Kopyalama başarısız: ${so_path} → ${target}"
+        echo -e " ${RED}${SYM_ERR}${NC} Copy failed: ${so_path} → ${target}"
+        FAILED_VERSIONS+=("$ver")
         return 0
     fi
 
-    # ── php.ini yapılandırması ────────────────────────────────────────────────
+    # ── php.ini ───────────────────────────────────────────────────────────────
+    printf "     %-14s" "php.ini..."
     if [[ -z "$ini" ]]; then
-        warn "php.ini bulunamadı. Manuel ekleyin:"
+        echo -e " ${YLW}${SYM_WARN}${NC} Not found — add manually:"
         warn "  echo 'extension=cryptonn' >> /path/to/php.ini"
     elif [[ ! -w "$ini" ]]; then
-        warn "php.ini yazılamıyor: ${ini}"
-        warn "  Manuel ekleyin: echo 'extension=cryptonn' >> ${ini}"
+        echo -e " ${YLW}${SYM_WARN}${NC} Not writable: ${ini}"
+        warn "  echo 'extension=cryptonn' >> ${ini}"
     else
-        if grep -qE "^;*\s*extension=cryptonn" "$ini" 2>/dev/null; then
-            # Zaten var — yorum satırını kaldır, aktif et
+        if grep -qE "^;*[[:space:]]*extension=cryptonn" "$ini" 2>/dev/null; then
             sed -i 's|^;*[[:space:]]*extension=cryptonn.*|extension=cryptonn|' "$ini"
-            ok "php.ini güncellendi (zaten vardı, aktif edildi): ${ini}"
+            echo -e " ${GRN}${SYM_OK}${NC} Enabled in existing ini"
         else
             echo "extension=cryptonn" >> "$ini"
-            ok "php.ini yapılandırıldı: ${ini}"
+            echo -e " ${GRN}${SYM_OK}${NC} Added to ${ini}"
         fi
     fi
+
+    INSTALLED_VERSIONS+=("$ver")
 }
 
-# ── Kontrol paneli tespiti ────────────────────────────────────────────────────
+# ── Panel detection ───────────────────────────────────────────────────────────
 detect_panel() {
-    if   [[ -d "/usr/local/cpanel" ]];                                    then echo "cpanel"
-    elif [[ -d "/usr/local/psa" ]] || command -v plesk &>/dev/null 2>&1;  then echo "plesk"
-    elif [[ -d "/usr/local/directadmin" ]];                               then echo "directadmin"
-    else                                                                        echo "bare"
+    if   [[ -d "/usr/local/cpanel" ]];                                   then echo "cpanel"
+    elif [[ -d "/usr/local/psa" ]] || command -v plesk &>/dev/null 2>&1; then echo "plesk"
+    elif [[ -d "/usr/local/directadmin" ]];                              then echo "directadmin"
+    else                                                                       echo "bare"
     fi
 }
 
-# ── cPanel kurulumu ───────────────────────────────────────────────────────────
+# ── Panel-specific installs ───────────────────────────────────────────────────
 install_cpanel() {
-    banner "cPanel / EasyApache 4"
-    info "EasyApache PHP versiyonları taranıyor..."
+    section "cPanel / EasyApache 4 — scanning PHP versions"
     local found=0
     for php in /opt/cpanel/ea-php*/root/usr/bin/php; do
         [[ -x "$php" ]] || continue
-        install_for "$php"
-        (( found++ )) || true
+        install_for "$php"; (( found++ )) || true
     done
-    if (( found == 0 )); then
-        warn "EasyApache PHP binary bulunamadı."
-        [[ -n "$FORCE_PHP" ]] || die "PHP binary belirtin: --php /usr/bin/php"
-        install_for "$FORCE_PHP"
-    fi
+    (( found )) || { warn "No EasyApache PHP binaries found."; install_for "$FORCE_PHP"; }
 }
 
-# ── Plesk kurulumu ────────────────────────────────────────────────────────────
 install_plesk() {
-    banner "Plesk — Tüm PHP versiyonları"
-    info "/opt/plesk/php/ dizini taranıyor..."
+    section "Plesk — scanning all installed PHP versions"
     local found=0
     for php in /opt/plesk/php/*/bin/php; do
         [[ -x "$php" ]] || continue
-        install_for "$php"
-        (( found++ )) || true
+        install_for "$php"; (( found++ )) || true
     done
-    if (( found == 0 )); then
-        warn "Plesk PHP binary bulunamadı."
-        [[ -n "$FORCE_PHP" ]] || die "PHP binary belirtin: --php /opt/plesk/php/8.3/bin/php"
-        install_for "$FORCE_PHP"
-    fi
+    (( found )) || { warn "No Plesk PHP binaries found."; install_for "$FORCE_PHP"; }
 
-    # Plesk PHP-FPM servislerini yeniden başlat
-    banner "Plesk PHP-FPM servisleri yeniden başlatılıyor"
+    section "Restarting Plesk PHP-FPM services"
     local restarted=0
     while IFS= read -r svc; do
         [[ -n "$svc" ]] || continue
+        printf "     %-46s" "$svc"
         if systemctl restart "$svc" 2>/dev/null; then
-            ok "Yeniden başlatıldı: ${svc}"
+            echo -e " ${GRN}${SYM_OK}${NC}"
             (( restarted++ )) || true
         else
-            warn "Yeniden başlatılamadı: ${svc}"
+            echo -e " ${YLW}${SYM_WARN}${NC} failed"
         fi
     done < <(systemctl list-units --type=service --state=active --no-legend 2>/dev/null \
              | awk '{print $1}' | grep -E 'plesk-php.*-fpm' || true)
 
-    if (( restarted == 0 )); then
-        warn "Aktif plesk-php*-fpm servisi bulunamadı."
-        warn "FPM'i manuel yeniden başlatın:"
-        warn "  systemctl restart plesk-php83-fpm"
-    fi
+    (( restarted == 0 )) && warn "No active plesk-php*-fpm services found — restart PHP-FPM manually."
 }
 
-# ── Bare / DirectAdmin kurulumu ───────────────────────────────────────────────
 install_bare() {
-    banner "PHP binary aranıyor"
+    section "Detecting PHP binary"
     if [[ -z "$FORCE_PHP" ]]; then
-        for candidate in php php8.5 php8.4 php8.3 php8.2 php8.1 php8.0 \
-                         php7.4 php7.3 php7.2; do
-            if command -v "$candidate" &>/dev/null; then
-                FORCE_PHP=$(command -v "$candidate")
-                info "Bulundu: ${FORCE_PHP}  (PHP $(php_ver "$FORCE_PHP"))"
+        for c in php php8.5 php8.4 php8.3 php8.2 php8.1 php8.0 php7.4 php7.3 php7.2; do
+            if command -v "$c" &>/dev/null; then
+                FORCE_PHP=$(command -v "$c")
+                info "Found: ${FORCE_PHP}  (PHP $(php_ver "$FORCE_PHP"))"
                 break
             fi
         done
     fi
     [[ -n "$FORCE_PHP" ]] \
-        || die "PHP binary bulunamadı. Kurun (PHP 7.2+) ya da --php argümanı kullanın."
+        || die "No PHP binary found. Install PHP 7.2+ or use --php /path/to/php"
     install_for "$FORCE_PHP"
 }
 
-# ── Doğrulama ─────────────────────────────────────────────────────────────────
+# ── Verification ──────────────────────────────────────────────────────────────
 verify_all() {
-    banner "Kurulum doğrulanıyor"
+    section "Verification"
     local php_list=()
     case "$PANEL" in
-        cpanel)          php_list=( /opt/cpanel/ea-php*/root/usr/bin/php ) ;;
-        plesk)           php_list=( /opt/plesk/php/*/bin/php ) ;;
-        directadmin|bare)
-            [[ -n "$FORCE_PHP" ]] && php_list=( "$FORCE_PHP" ) || php_list=() ;;
+        cpanel)           php_list=( /opt/cpanel/ea-php*/root/usr/bin/php ) ;;
+        plesk)            php_list=( /opt/plesk/php/*/bin/php ) ;;
+        directadmin|bare) [[ -n "$FORCE_PHP" ]] && php_list=( "$FORCE_PHP" ) || php_list=() ;;
     esac
 
-    local pass=0 fail=0
+    echo ""
+    echo -e "  ${CYN}┌──────────────┬───────────────────────────────────────┐${NC}"
+    echo -e "  ${CYN}│${NC}  ${BLD}PHP Version ${NC}  ${CYN}│${NC}  ${BLD}Status${NC}                                  ${CYN}│${NC}"
+    echo -e "  ${CYN}├──────────────┼───────────────────────────────────────┤${NC}"
+
     for php in "${php_list[@]}"; do
         [[ -x "$php" ]] || continue
         local ver result
         ver=$(php_ver "$php")
-        result=$("$php" -r "echo extension_loaded('cryptonn') ? 'OK' : 'FAIL';" 2>/dev/null) \
+        result=$("$php" -r "echo extension_loaded('cryptonn') ? 'LOADED' : 'FAIL';" 2>/dev/null) \
             || result="ERROR"
-        if [[ "$result" == "OK" ]]; then
-            ok "PHP ${ver}: extension yüklendi"
-            (( pass++ )) || true
+        if [[ "$result" == "LOADED" ]]; then
+            printf "  ${CYN}│${NC}  %-12s  ${CYN}│${NC}  ${GRN}${SYM_OK} Loaded successfully${NC}%-21s${CYN}│${NC}\n" "PHP $ver" ""
         else
-            warn "PHP ${ver}: ${result}"
-            warn "  → Web sunucusunu (Apache/Nginx) veya PHP-FPM'i yeniden başlatın."
-            (( fail++ )) || true
+            printf "  ${CYN}│${NC}  %-12s  ${CYN}│${NC}  ${YLW}${SYM_WARN} %-37s${NC}${CYN}│${NC}\n" "PHP $ver" "Restart web server / FPM"
         fi
     done
-
-    (( pass + fail == 0 )) && warn "Doğrulanacak PHP binary bulunamadı."
+    echo -e "  ${CYN}└──────────────┴───────────────────────────────────────┘${NC}"
+    echo ""
 }
 
-# ── Özet ekranı ───────────────────────────────────────────────────────────────
+# ── Final summary ─────────────────────────────────────────────────────────────
 print_summary() {
+    local n_ok=${#INSTALLED_VERSIONS[@]}
+    local n_fail=${#FAILED_VERSIONS[@]}
+
     echo ""
-    echo -e "${BLD}${GRN}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLD}${GRN}║   CryptONN Extension başarıyla kuruldu!              ║${NC}"
-    echo -e "${BLD}${GRN}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  ${BLD}Önemli notlar:${NC}"
-    echo "  • Sunucuda lisans anahtarı gerekmez."
-    echo "  • Extension, her encoded dosyanın başlığından license ID'yi"
-    echo "    okur ve API'den şifre çözme anahtarını otomatik alır."
-    echo "  • Encoded dosyalar .php uzantısıyla include edilir:"
-    echo ""
-    echo -e "      ${CYN}require 'path/to/encoded_file.php';${NC}"
-    echo ""
-    echo "  Kurulumu doğrulamak için:"
-    echo -e "      ${CYN}php -r \"echo extension_loaded('cryptonn') ? 'OK' : 'Yüklü değil';\"${NC}"
-    echo ""
-    echo "  phpinfo() çıktısında 'CryptONN support => enabled' görünmelidir."
+    box_top
+    box_empty
+
+    if (( n_ok > 0 )); then
+        box_center "${GRN}${BLD}Installation Complete!${NC}"
+    else
+        box_center "${YLW}${BLD}Installation finished with warnings${NC}"
+    fi
+
+    box_empty
+    box_sep
+
+    if (( n_ok > 0 )); then
+        box_row "  ${GRN}${SYM_OK}${NC}  Installed for ${BLD}${n_ok}${NC} PHP version(s):"
+        for v in "${INSTALLED_VERSIONS[@]}"; do
+            box_row "       ${DIM}${SYM_DOT}${NC}  PHP ${v}"
+        done
+    fi
+
+    if (( n_fail > 0 )); then
+        box_empty
+        box_row "  ${YLW}${SYM_WARN}${NC}  Skipped ${BLD}${n_fail}${NC} PHP version(s):"
+        for v in "${FAILED_VERSIONS[@]}"; do
+            box_row "       ${DIM}${SYM_DOT}${NC}  PHP ${v}  (see warnings above)"
+        done
+    fi
+
+    box_sep
+    box_empty
+    box_row "  ${DIM}No license key is required on this server.${NC}"
+    box_row "  ${DIM}The extension reads the license ID from each${NC}"
+    box_row "  ${DIM}encoded file and fetches the key from the API.${NC}"
+    box_empty
+    box_row "  Encoded files keep their ${BLD}.php${NC} extension:"
+    box_row ""
+    box_row "    ${CYN}require 'path/to/encoded_file.php';${NC}"
+    box_empty
+    box_row "  Verify at any time:"
+    box_row "    ${CYN}php -r \"echo extension_loaded('cryptonn');\"${NC}"
+    box_empty
+    box_bot
     echo ""
 }
 
-# ── Ana akış ──────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 main() {
-    echo ""
-    echo -e "${BLD}${CYN}CryptONN Extension Installer v1.1.0${NC}"
-    echo -e "${CYN}══════════════════════════════════════${NC}"
-    echo ""
-    info "Mimari      : ${ARCH}"
-    PANEL=$(detect_panel)
-    info "Panel       : ${PANEL}"
-    info "İndirme dir : ${INSTALL_DIR}"
-
+    print_header
+    preflight
     case "$PANEL" in
         cpanel)           install_cpanel ;;
         plesk)            install_plesk  ;;
         directadmin|bare) install_bare   ;;
     esac
-
     verify_all
     print_summary
 }
