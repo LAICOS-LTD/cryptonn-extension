@@ -31,61 +31,38 @@
 
 set -euo pipefail
 
-# ── Colours ($'...' so ESC is a real byte, not a literal backslash) ───────────
+# ── Colours ───────────────────────────────────────────────────────────────────
+# printf '\033' produces the actual ESC byte (0x1b) on every system.
+# Never use $'...' or echo -e for colour definitions — both have portability gaps.
+_E=$(printf '\033')
 if [[ -t 1 ]]; then
-    R=$'\033[0;31m'  G=$'\033[0;32m'  Y=$'\033[1;33m'
-    C=$'\033[0;36m'  B=$'\033[0;34m'  W=$'\033[1;37m'
-    D=$'\033[2m'     L=$'\033[1m'     NC=$'\033[0m'
+    CR="${_E}[0;31m"   # red
+    CG="${_E}[0;32m"   # green
+    CY="${_E}[1;33m"   # yellow
+    CC="${_E}[0;36m"   # cyan
+    CW="${_E}[1;37m"   # bold white
+    CD="${_E}[2m"      # dim
+    CB="${_E}[1m"      # bold
+    NC="${_E}[0m"      # reset
 else
-    R='' G='' Y='' C='' B='' W='' D='' L='' NC=''
+    CR='' CG='' CY='' CC='' CW='' CD='' CB='' NC=''
 fi
 
-OK="${G}✔${NC}"
-WARN="${Y}⚠${NC}"
-ERR="${R}✖${NC}"
-INF="${C}i${NC}"
+SYM_OK="${CG}✔${NC}"
+SYM_WN="${CY}⚠${NC}"
+SYM_ER="${CR}✖${NC}"
+SYM_IF="${CC}i${NC}"
+SYM_UP="${CC}↑${NC}"
 
-# ── Box / layout helpers ──────────────────────────────────────────────────────
-BOX_W=60      # inner width (between the ║ borders)
-
-# strip ANSI codes to measure visible length
-_vlen() { printf '%s' "$1" | sed $'s/\033\\[[0-9;]*m//g' | wc -m | tr -d ' '; }
-
-_hline() { # char  count
-    local s='' i; for (( i=0; i<$2; i++ )); do s+="$1"; done; printf '%s' "$s"
-}
-
-_box_top() { echo -e "${C}╔$(_hline ═ $BOX_W)╗${NC}"; }
-_box_bot() { echo -e "${C}╚$(_hline ═ $BOX_W)╝${NC}"; }
-_box_sep() { echo -e "${C}╠$(_hline ═ $BOX_W)╣${NC}"; }
-_box_empty(){ echo -e "${C}║$(_hline ' ' $BOX_W)║${NC}"; }
-
-# one row — left-aligned, padded to BOX_W
-_box_row() {
-    local text="${1:-}" vl pad
-    vl=$(_vlen "$text")
-    pad=$(( BOX_W - vl ))
-    (( pad < 0 )) && pad=0
-    echo -e "${C}║${NC}${text}$(printf '%*s' $pad '')${C}║${NC}"
-}
-
-# one row — centred
-_box_mid() {
-    local text="${1:-}" vl pad pl pr
-    vl=$(_vlen "$text")
-    pad=$(( BOX_W - vl ))
-    pl=$(( pad / 2 )); pr=$(( pad - pl ))
-    echo -e "${C}║${NC}$(printf '%*s' $pl '')${text}$(printf '%*s' $pr '')${C}║${NC}"
-}
-
-# section divider
-sec() { echo -e "\n  ${C}┌─ ${L}${W}$1${NC} ${C}$(_hline ─ $(( BOX_W - ${#1} - 2 )))${NC}"; }
-
-ok()   { echo -e "     ${OK}  $*"; }
-warn() { echo -e "     ${WARN}  ${Y}$*${NC}"; }
-err()  { echo -e "     ${ERR}  ${R}$*${NC}"; }
-die()  { echo -e "\n  ${ERR}  ${R}ERROR: $*${NC}\n" >&2; exit 1; }
-info() { echo -e "     ${INF}  ${D}$*${NC}"; }
+# ── Output helpers ────────────────────────────────────────────────────────────
+# Use printf '%s\n' — actual ESC bytes in variables pass through unchanged.
+println() { printf '%s\n' "$*"; }
+ok()      { printf '     %s  %s\n'   "$SYM_OK" "$*"; }
+warn()    { printf '     %s  %b\n'   "$SYM_WN" "${CY}$*${NC}"; }
+die()     { printf '\n  %s  %b\n\n'  "$SYM_ER" "${CR}ERROR: $*${NC}" >&2; exit 1; }
+info()    { printf '     %s  %b\n'   "$SYM_IF" "${CD}$*${NC}"; }
+sec()     { printf '\n  %s┌─ %s%s %s─────────────────────────────────────────%s\n' \
+              "$CC" "$CB$CW" "$1" "$CC" "$NC"; }
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 RELEASE_BASE="https://github.com/LAICOS-LTD/cryptonn-loader/releases/latest/download"
@@ -96,6 +73,7 @@ FORCE_PHP=""
 PANEL=""
 AUTO_YES=0
 CMD="auto"
+ARCH=""
 
 declare -a V_FRESH=()
 declare -a V_UPDATED=()
@@ -123,43 +101,41 @@ VERSION_FILE="${INSTALL_DIR}/.version"
 
 # ── Header ────────────────────────────────────────────────────────────────────
 print_header() {
-    local title="CryptONN Extension Installer"
-    local sub="v1.3.0  ·  LAICOS-LTD/cryptonn-loader"
-    echo ""
-    _box_top
-    _box_empty
-    _box_mid "${L}${W}${title}${NC}"
-    _box_mid "${D}${sub}${NC}"
-    _box_empty
-    _box_bot
-    echo ""
+    local HL="${CC}══════════════════════════════════════════════════════════${NC}"
+    local SP="                                                            "
+    println ""
+    println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
+    println "${CC}║${NC}${SP}${CC}║${NC}"
+    println "${CC}║${NC}         ${CB}${CW}CryptONN Extension Installer${NC}               ${CC}║${NC}"
+    println "${CC}║${NC}         ${CD}v1.3.0  ·  LAICOS-LTD/cryptonn-loader${NC}          ${CC}║${NC}"
+    println "${CC}║${NC}${SP}${CC}║${NC}"
+    println "${CC}╚══════════════════════════════════════════════════════════╝${NC}"
+    println ""
 }
 
 # ── PHP helpers ───────────────────────────────────────────────────────────────
 php_ver()    { "$1" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null; }
 php_extdir() { "$1" -r 'echo ini_get("extension_dir");' 2>/dev/null; }
 php_ini()    { "$1" --ini 2>/dev/null | awk -F': ' '/Loaded Configuration/{gsub(/ /,"",$2);print $2}'; }
-php_ok() {
+php_ok()     {
     local v major minor
     [[ -x "$1" ]] || return 1
     v=$(php_ver "$1"); IFS='.' read -r major minor <<< "$v"
     (( major > 7 || (major == 7 && minor >= 2) ))
 }
-ext_installed() { local d; d=$(php_extdir "$1"); [[ -f "${d}/cryptonn.so" ]]; }
+ext_installed() { local d; d=$(php_extdir "$1" 2>/dev/null); [[ -f "${d}/cryptonn.so" ]]; }
 ext_ver()       { "$1" -r "echo extension_loaded('cryptonn') ? phpversion('cryptonn') : '';" 2>/dev/null || true; }
 
 # ── Version helpers ───────────────────────────────────────────────────────────
 ver_read()   { [[ -f "$VERSION_FILE" ]] && cat "$VERSION_FILE" || echo ""; }
-ver_write()  { echo "$1" > "$VERSION_FILE"; }
+ver_write()  { mkdir -p "$(dirname "$VERSION_FILE")"; echo "$1" > "$VERSION_FILE"; }
 ver_delete() { rm -f "$VERSION_FILE"; }
-
 get_latest() {
     curl -fsSL --connect-timeout 10 "$RELEASE_API" 2>/dev/null \
         | grep '"tag_name"' | head -1 \
         | sed 's/.*"v*\([0-9][^"]*\)".*/\1/'
 }
-
-ver_gt() {   # $1 > $2 ?
+ver_gt() {
     local IFS=.
     read -ra A <<< "$1"; read -ra B <<< "$2"
     local i
@@ -172,7 +148,6 @@ ver_gt() {   # $1 > $2 ?
 }
 
 # ── Architecture & panel ──────────────────────────────────────────────────────
-ARCH=""
 detect_arch() {
     case "$(uname -m)" in
         x86_64)        echo "x86_64"  ;;
@@ -224,12 +199,8 @@ each_php() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  INSTALL (one PHP)
+#  INSTALL — one PHP version
 # ══════════════════════════════════════════════════════════════════════════════
-_pline() { # label  result_string
-    printf "     %-16s %s\n" "$1" "$2"
-}
-
 install_for() {
     local php="$1" force="${2:-0}"
     [[ -x "$php" ]] || return 0
@@ -242,89 +213,89 @@ install_for() {
     so_path="${INSTALL_DIR}/${so}"
     target="${extdir}/cryptonn.so"
 
-    echo ""
-    echo -e "  ${C}┌─ ${L}${W}PHP ${ver}${NC}"
-    echo -e "  ${C}│${NC}  ${D}${php}${NC}"
-    echo -e "  ${C}│${NC}  ${D}ext › ${extdir}${NC}"
-    echo -e "  ${C}│${NC}  ${D}ini › ${ini:-not found}${NC}"
-    echo -e "  ${C}├─────────────────────────────────────────────────────${NC}"
+    println ""
+    printf '  %s┌─ %sPHP %s%s  %s%s%s\n'      "$CC" "$CB$CW" "$ver" "$NC" "$CD" "$php" "$NC"
+    printf '  %s│%s  ext › %s%s%s\n'           "$CC" "$NC" "$CD" "$extdir" "$NC"
+    printf '  %s│%s  ini › %s%s%s\n'           "$CC" "$NC" "$CD" "${ini:-not found}" "$NC"
+    printf '  %s├─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
 
-    [[ -d "$extdir" ]] || {
-        echo -e "  ${C}│${NC}  ${ERR}  Extension dir not found — skipping."
-        echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+    if [[ ! -d "$extdir" ]]; then
+        printf '  %s│%s  %s  Extension dir not found — skipping\n' "$CC" "$NC" "$SYM_ER"
+        printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
         V_FAILED+=("$ver"); return 0
-    }
+    fi
 
-    # Already up to date?
+    # Skip if already up to date
     if (( force == 0 )) && ext_installed "$php"; then
-        local cur; cur=$(ext_ver "$php")
-        local lat; lat=$(ver_read)
+        local cur lat
+        cur=$(ext_ver "$php"); lat=$(ver_read)
         if [[ -n "$cur" && -n "$lat" && "$cur" == "$lat" ]]; then
-            echo -e "  ${C}│${NC}  ${INF}  Already at ${G}v${cur}${NC} — up to date"
-            echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+            printf '  %s│%s  %s  Already at %sv%s%s — up to date\n' \
+                "$CC" "$NC" "$SYM_IF" "$CG" "$cur" "$NC"
+            printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
             V_SKIPPED+=("$ver@${cur}"); return 0
         fi
     fi
 
     # Download
-    printf "  ${C}│${NC}  %-17s" "Downloading..."
+    printf '  %s│%s  %-18s' "$CC" "$NC" "Downloading..."
     if curl -fsSL --connect-timeout 20 --retry 3 \
             "${RELEASE_BASE}/${so}" -o "$so_path" 2>/dev/null; then
         local sz; sz=$(du -sh "$so_path" 2>/dev/null | cut -f1)
-        echo -e "  ${OK}  ${D}${so} (${sz})${NC}"
+        printf '%s  %s%s %s(%s)%s\n' "$SYM_OK" "$CD" "$so" "$CD" "$sz" "$NC"
     else
-        echo -e "  ${ERR}  Failed"
-        echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+        printf '%s  Download failed\n' "$SYM_ER"
+        printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
         V_FAILED+=("$ver"); return 0
     fi
 
     # SHA-256
-    printf "  ${C}│${NC}  %-17s" "SHA-256..."
     local chk="${so_path}.sha256"
+    printf '  %s│%s  %-18s' "$CC" "$NC" "SHA-256..."
     if curl -fsSL --connect-timeout 10 "${RELEASE_BASE}/${so}.sha256" \
             -o "$chk" 2>/dev/null; then
         local exp act
         exp=$(tr -d '[:space:]' < "$chk")
         act=$(sha256sum "$so_path" | awk '{print $1}')
+        rm -f "$chk"
         if [[ "$exp" == "$act" ]]; then
-            echo -e "  ${OK}  ${D}${act:0:24}…${NC}"
-            rm -f "$chk"
+            printf '%s  %s%s…%s\n' "$SYM_OK" "$CD" "${act:0:28}" "$NC"
         else
-            echo -e "  ${ERR}  Mismatch — aborting PHP ${ver}"
-            echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
-            rm -f "$so_path" "$chk"; V_FAILED+=("$ver"); return 0
+            printf '%s  Checksum mismatch — aborting PHP %s\n' "$SYM_ER" "$ver"
+            printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
+            rm -f "$so_path"; V_FAILED+=("$ver"); return 0
         fi
     else
-        echo -e "  ${WARN}  Unavailable — skipped"
         rm -f "$chk"
+        printf '%s  Unavailable — skipped\n' "$SYM_WN"
     fi
 
-    # Copy
+    # Install
     local was=0; [[ -f "$target" ]] && was=1
-    printf "  ${C}│${NC}  %-17s" "Installing..."
+    printf '  %s│%s  %-18s' "$CC" "$NC" "Installing..."
     if cp "$so_path" "$target" && chmod 644 "$target"; then
-        echo -e "  ${OK}  ${D}${target}${NC}"
+        printf '%s  %s%s%s\n' "$SYM_OK" "$CD" "$target" "$NC"
     else
-        echo -e "  ${ERR}  Copy failed"
-        echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+        printf '%s  Copy failed\n' "$SYM_ER"
+        printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
         V_FAILED+=("$ver"); return 0
     fi
 
     # php.ini
-    printf "  ${C}│${NC}  %-17s" "php.ini..."
+    printf '  %s│%s  %-18s' "$CC" "$NC" "php.ini..."
     if [[ -z "$ini" ]]; then
-        echo -e "  ${WARN}  Not found — add manually: extension=cryptonn"
+        printf '%s  Not found — add manually: extension=cryptonn\n' "$SYM_WN"
     elif [[ ! -w "$ini" ]]; then
-        echo -e "  ${WARN}  Not writable: ${ini}"
+        printf '%s  Not writable: %s\n' "$SYM_WN" "$ini"
     elif grep -qE "^;*[[:space:]]*extension=cryptonn" "$ini" 2>/dev/null; then
         sed -i 's|^;*[[:space:]]*extension=cryptonn.*|extension=cryptonn|' "$ini"
-        echo -e "  ${OK}  Enabled in ${D}${ini}${NC}"
+        printf '%s  %sEnabled%s in %s%s%s\n' "$SYM_OK" "$CG" "$NC" "$CD" "$ini" "$NC"
     else
         echo "extension=cryptonn" >> "$ini"
-        echo -e "  ${OK}  Added to ${D}${ini}${NC}"
+        printf '%s  %sAdded%s to %s%s%s\n' "$SYM_OK" "$CG" "$NC" "$CD" "$ini" "$NC"
     fi
 
-    echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+    printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
     (( was )) && V_UPDATED+=("$ver") || V_FRESH+=("$ver")
 }
 
@@ -334,15 +305,15 @@ restart_plesk_fpm() {
     local n=0
     while IFS= read -r svc; do
         [[ -n "$svc" ]] || continue
-        printf "     %-50s" "${svc}"
+        printf '     %-48s' "$svc"
         if systemctl restart "$svc" 2>/dev/null; then
-            echo -e " ${OK}"; (( n++ )) || true
+            printf '%s\n' "$SYM_OK"; (( n++ )) || true
         else
-            echo -e " ${WARN} failed"
+            printf '%s failed\n' "$SYM_WN"
         fi
     done < <(systemctl list-units --type=service --state=active --no-legend 2>/dev/null \
              | awk '{print $1}' | grep -E 'plesk-php.*-fpm' || true)
-    (( n == 0 )) && warn "No active plesk-php*-fpm found — restart FPM manually."
+    (( n == 0 )) && warn "No active plesk-php*-fpm services — restart FPM manually."
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -357,65 +328,71 @@ uninstall_for() {
     ver=$(php_ver "$php"); extdir=$(php_extdir "$php")
     ini=$(php_ini "$php"); target="${extdir}/cryptonn.so"
 
-    echo ""
-    echo -e "  ${C}┌─ ${L}${W}PHP ${ver}${NC}"
-    echo -e "  ${C}├─────────────────────────────────────────────────────${NC}"
+    println ""
+    printf '  %s┌─ %sPHP %s%s  %s%s%s\n'      "$CC" "$CB$CW" "$ver" "$NC" "$CD" "$php" "$NC"
+    printf '  %s├─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
 
     if [[ ! -f "$target" ]]; then
-        echo -e "  ${C}│${NC}  ${INF}  Not installed — skipping"
-        echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+        printf '  %s│%s  %s  Not installed — nothing to do\n' "$CC" "$NC" "$SYM_IF"
+        printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
         return 0
     fi
 
-    printf "  ${C}│${NC}  %-17s" "Removing .so..."
+    printf '  %s│%s  %-18s' "$CC" "$NC" "Removing .so..."
     if rm -f "$target"; then
-        echo -e "  ${OK}  ${D}${target}${NC}"
+        printf '%s  %s%s%s\n' "$SYM_OK" "$CD" "$target" "$NC"
     else
-        echo -e "  ${ERR}  Failed to remove ${target}"
-        echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+        printf '%s  Failed to remove %s\n' "$SYM_ER" "$target"
+        printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
         return 0
     fi
 
-    printf "  ${C}│${NC}  %-17s" "php.ini..."
+    printf '  %s│%s  %-18s' "$CC" "$NC" "php.ini..."
     if [[ -n "$ini" && -w "$ini" ]]; then
         sed -i '/^;*[[:space:]]*extension=cryptonn/d' "$ini"
-        echo -e "  ${OK}  Line removed from ${D}${ini}${NC}"
+        printf '%s  %sLine removed%s from %s%s%s\n' "$SYM_OK" "$CG" "$NC" "$CD" "$ini" "$NC"
     else
-        echo -e "  ${WARN}  Remove manually: extension=cryptonn from ${ini:-php.ini}"
+        printf '%s  Remove manually: extension=cryptonn\n' "$SYM_WN"
     fi
 
-    echo -e "  ${C}└─────────────────────────────────────────────────────${NC}"
+    printf '  %s└─────────────────────────────────────────────────────%s\n' "$CC" "$NC"
     V_REMOVED+=("$ver")
 }
 
 cmd_uninstall() {
     sec "Uninstall CryptONN extension"
-    echo ""
+    println ""
+
     if (( AUTO_YES == 0 )); then
-        echo -e "  ${Y}${L}This will remove cryptonn.so from ALL PHP versions.${NC}"
-        echo -ne "  ${W}Continue? [y/N] ${NC}"
+        printf '  %s%s  This will remove cryptonn.so from ALL PHP versions.%s\n' "$CY" "$CB" "$NC"
+        printf '  %sContinue? [y/N]%s ' "$CW" "$NC"
         read -r ans
-        [[ "$ans" =~ ^[Yy]$ ]] || { echo -e "  ${D}Aborted.${NC}"; exit 0; }
+        [[ "$ans" =~ ^[Yy]$ ]] || { println "  ${CD}Aborted.${NC}"; exit 0; }
     fi
 
     local n=0
-    while IFS= read -r php; do uninstall_for "$php"; (( n++ )) || true; done < <(each_php)
+    while IFS= read -r php; do
+        uninstall_for "$php"; (( n++ )) || true
+    done < <(each_php)
     (( n == 0 )) && warn "No PHP binaries found."
-
     ver_delete
     case "$PANEL" in plesk) restart_plesk_fpm ;; esac
 
-    echo ""
-    _box_top; _box_empty
+    println ""
+    println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
     if (( ${#V_REMOVED[@]} > 0 )); then
-        _box_mid "${G}${L}Uninstall complete!${NC}"
-        _box_empty; _box_sep; _box_empty
-        _box_row "  ${G}${OK}${NC}  Removed from ${L}${#V_REMOVED[@]}${NC} PHP version(s):"
-        for v in "${V_REMOVED[@]}"; do _box_row "       ${D}•  PHP ${v}${NC}"; done
+        println "${CC}║${NC}  ${CG}${CB}Uninstall complete!${NC}                                       ${CC}║${NC}"
+        println "${CC}╠══════════════════════════════════════════════════════════╣${NC}"
+        printf  "${CC}║${NC}  %s  Removed from %s%d%s PHP version(s):%-21s${CC}║${NC}\n" \
+            "$SYM_OK" "$CB" "${#V_REMOVED[@]}" "$NC" ""
+        for v in "${V_REMOVED[@]}"; do
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-41s${CC}║${NC}\n" "$v" ""
+        done
     else
-        _box_mid "${Y}${L}Nothing was removed${NC}"
+        println "${CC}║${NC}  ${CY}Nothing was removed${NC}                                     ${CC}║${NC}"
     fi
-    _box_empty; _box_bot; echo ""
+    println "${CC}╚══════════════════════════════════════════════════════════╝${NC}"
+    println ""
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -423,46 +400,45 @@ cmd_uninstall() {
 # ══════════════════════════════════════════════════════════════════════════════
 cmd_status() {
     sec "Installation status"
-    echo ""
-    printf "     %-20s" "Checking GitHub..."
+    println ""
+    printf '     %-22s' "Checking GitHub..."
     local lat; lat=$(get_latest 2>/dev/null) || lat=""
     if [[ -n "$lat" ]]; then
-        echo -e " ${OK}  Latest: ${G}${L}v${lat}${NC}"
+        printf '%s  Latest release: %s%sv%s%s\n' "$SYM_OK" "$CG" "$CB" "$lat" "$NC"
     else
-        echo -e " ${WARN}  Could not reach GitHub"
+        printf '%s  Could not reach GitHub\n' "$SYM_WN"
     fi
-    echo ""
-
-    echo -e "  ${C}┌──────────────┬───────────────┬─────────────────────┐${NC}"
-    echo -e "  ${C}│${NC}  ${L}PHP Version${NC}  ${C}│${NC}  ${L}Installed${NC}      ${C}│${NC}  ${L}Status${NC}              ${C}│${NC}"
-    echo -e "  ${C}├──────────────┼───────────────┼─────────────────────┤${NC}"
+    println ""
+    printf '  %s┌──────────────┬──────────────┬────────────────────────┐%s\n' "$CC" "$NC"
+    printf '  %s│%s  %sPhP Version%s  %s│%s  %sInstalled%s     %s│%s  %sStatus%s                  %s│%s\n' \
+        "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC"
+    printf '  %s├──────────────┼──────────────┼────────────────────────┤%s\n' "$CC" "$NC"
 
     local any=0
     while IFS= read -r php; do
         [[ -x "$php" ]] || continue; php_ok "$php" || continue
-        local ver cur_ver status_str status_col
+        local ver cur_v stat_str stat_col
         ver=$(php_ver "$php")
         if ext_installed "$php"; then
-            cur_ver=$(ext_ver "$php"); [[ -z "$cur_ver" ]] && cur_ver="?"
-            if [[ -n "$lat" ]] && ver_gt "$lat" "$cur_ver"; then
-                status_str="Update → v${lat}"
-                status_col="${Y}"
+            cur_v=$(ext_ver "$php"); [[ -z "$cur_v" ]] && cur_v="?"
+            if [[ -n "$lat" ]] && ver_gt "$lat" "$cur_v"; then
+                stat_str="Update → v${lat}"; stat_col="$CY"
             else
-                status_str="Up to date"
-                status_col="${G}"
+                stat_str="Up to date"; stat_col="$CG"
             fi
-            printf "  ${C}│${NC}  %-12s  ${C}│${NC}  ${G}v%-13s${NC}${C}│${NC}  ${status_col}%-21s${NC}${C}│${NC}\n" \
-                "PHP $ver" "$cur_ver" "$status_str"
+            printf '  %s│%s  %-12s  %s│%s  %sv%-12s%s%s│%s  %s%-24s%s%s│%s\n' \
+                "$CC" "$NC" "PHP $ver" "$CC" "$NC" "$CG" "$cur_v" "$NC" "$CC" "$NC" \
+                "$stat_col" "$stat_str" "$NC" "$CC" "$NC"
         else
-            printf "  ${C}│${NC}  %-12s  ${C}│${NC}  ${D}%-15s${NC}${C}│${NC}  ${D}%-21s${NC}${C}│${NC}\n" \
-                "PHP $ver" "—" "Not installed"
+            printf '  %s│%s  %-12s  %s│%s  %-14s%s│%s  %-24s%s│%s\n' \
+                "$CC" "$NC" "PHP $ver" "$CC" "$NC" "—" "$CC" "$NC" "Not installed" "$CC" "$NC"
         fi
         (( any++ )) || true
     done < <(each_php)
 
-    echo -e "  ${C}└──────────────┴───────────────┴─────────────────────┘${NC}"
+    printf '  %s└──────────────┴──────────────┴────────────────────────┘%s\n' "$CC" "$NC"
     (( any == 0 )) && warn "No PHP binaries found."
-    echo ""
+    println ""
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -472,23 +448,24 @@ cmd_install() {
     local force="${1:-0}"
 
     sec "Fetching latest release"
-    printf "     %-20s" "GitHub API..."
+    printf '     %-22s' "GitHub API..."
     local lat; lat=$(get_latest 2>/dev/null) || lat=""
     if [[ -n "$lat" ]]; then
-        echo -e " ${OK}  ${G}${L}v${lat}${NC}"
+        printf '%s  %s%sv%s%s\n' "$SYM_OK" "$CG" "$CB" "$lat" "$NC"
     else
-        echo -e " ${WARN}  Unreachable — will install cached download"
+        printf '%s  Unreachable — installing cached download\n' "$SYM_WN"
     fi
 
     local cur; cur=$(ver_read)
     if [[ -n "$cur" && -n "$lat" && "$cur" == "$lat" && "$force" == "0" ]]; then
-        echo ""
-        ok "Already on ${G}v${cur}${NC} — nothing to do."
-        info "Use --install to force reinstall, or --status to check versions."
-        echo ""; return 0
+        println ""
+        ok "Already on ${CG}v${cur}${NC} — nothing to do."
+        info "Use --install to force reinstall, or --status to inspect."
+        println ""; return 0
     fi
     if [[ -n "$cur" && -n "$lat" ]] && ver_gt "$lat" "$cur"; then
-        echo -e "     ${C}↑${NC}  Upgrading ${D}v${cur}${NC} → ${G}${L}v${lat}${NC}"
+        printf '     %s  Upgrading %sv%s%s → %s%sv%s%s\n' \
+            "$SYM_UP" "$CD" "$cur" "$NC" "$CG" "$CB" "$lat" "$NC"
     fi
 
     sec "Installing extension"
@@ -505,73 +482,97 @@ cmd_install() {
 # ── Verification table ────────────────────────────────────────────────────────
 verify_all() {
     sec "Verification"
-    echo ""
-    echo -e "  ${C}┌──────────────┬───────────────┬─────────────────────┐${NC}"
-    echo -e "  ${C}│${NC}  ${L}PHP Version${NC}  ${C}│${NC}  ${L}Version${NC}        ${C}│${NC}  ${L}Status${NC}              ${C}│${NC}"
-    echo -e "  ${C}├──────────────┼───────────────┼─────────────────────┤${NC}"
+    println ""
+    printf '  %s┌──────────────┬──────────────┬────────────────────────┐%s\n' "$CC" "$NC"
+    printf '  %s│%s  %sPHP Version%s  %s│%s  %sVersion%s       %s│%s  %sStatus%s                  %s│%s\n' \
+        "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC" "$CB" "$NC" "$CC" "$NC"
+    printf '  %s├──────────────┼──────────────┼────────────────────────┤%s\n' "$CC" "$NC"
+
     while IFS= read -r php; do
         [[ -x "$php" ]] || continue; php_ok "$php" || continue
         local ver v
-        ver=$(php_ver "$php")
-        v=$(ext_ver "$php")
+        ver=$(php_ver "$php"); v=$(ext_ver "$php")
         if [[ -n "$v" ]]; then
-            printf "  ${C}│${NC}  %-12s  ${C}│${NC}  ${G}v%-13s${NC}${C}│${NC}  ${G}%-21s${NC}${C}│${NC}\n" \
-                "PHP $ver" "$v" "Loaded  ✔"
+            printf '  %s│%s  %-12s  %s│%s  %sv%-12s%s%s│%s  %s%-24s%s%s│%s\n' \
+                "$CC" "$NC" "PHP $ver" "$CC" "$NC" "$CG" "$v" "$NC" "$CC" "$NC" \
+                "$CG" "Loaded  ✔" "$NC" "$CC" "$NC"
         else
-            printf "  ${C}│${NC}  %-12s  ${C}│${NC}  ${D}%-15s${NC}${C}│${NC}  ${Y}%-21s${NC}${C}│${NC}\n" \
-                "PHP $ver" "—" "Restart FPM / Apache"
+            printf '  %s│%s  %-12s  %s│%s  %-14s%s│%s  %s%-24s%s%s│%s\n' \
+                "$CC" "$NC" "PHP $ver" "$CC" "$NC" "—" "$CC" "$NC" \
+                "$CY" "Restart FPM / Apache" "$NC" "$CC" "$NC"
         fi
     done < <(each_php)
-    echo -e "  ${C}└──────────────┴───────────────┴─────────────────────┘${NC}"
-    echo ""
+
+    printf '  %s└──────────────┴──────────────┴────────────────────────┘%s\n' "$CC" "$NC"
+    println ""
 }
 
-# ── Final summary box ─────────────────────────────────────────────────────────
+# ── Final summary ─────────────────────────────────────────────────────────────
 print_summary() {
     local n_ok=$(( ${#V_FRESH[@]} + ${#V_UPDATED[@]} ))
     local n_skip=${#V_SKIPPED[@]}
     local n_fail=${#V_FAILED[@]}
-    echo ""
-    _box_top; _box_empty
 
-    if   (( n_ok   > 0 )); then _box_mid "${G}${L}Installation complete!${NC}"
-    elif (( n_skip > 0 )); then _box_mid "${C}${L}Already up to date${NC}"
-    else                        _box_mid "${Y}${L}Completed with warnings${NC}"
+    println ""
+    println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
+
+    if   (( n_ok   > 0 )); then
+        println "${CC}║${NC}  ${CG}${CB}Installation complete!${NC}                                   ${CC}║${NC}"
+    elif (( n_skip > 0 )); then
+        println "${CC}║${NC}  ${CC}${CB}Already up to date${NC}                                       ${CC}║${NC}"
+    else
+        println "${CC}║${NC}  ${CY}${CB}Completed with warnings${NC}                                  ${CC}║${NC}"
     fi
 
-    _box_empty; _box_sep; _box_empty
+    println "${CC}╠══════════════════════════════════════════════════════════╣${NC}"
+    println "${CC}║${NC}                                                          ${CC}║${NC}"
 
     if (( ${#V_FRESH[@]} > 0 )); then
-        _box_row "  ${G}${OK}${NC}  Installed on ${L}${#V_FRESH[@]}${NC} PHP version(s):"
-        for v in "${V_FRESH[@]}";   do _box_row "       ${D}•  PHP ${v}${NC}"; done
-        _box_empty
+        printf  "${CC}║${NC}  %s  %sInstalled%s on %s%d%s PHP version(s):%-21s${CC}║${NC}\n" \
+            "$SYM_OK" "$CG" "$NC" "$CB" "${#V_FRESH[@]}" "$NC" ""
+        for v in "${V_FRESH[@]}"; do
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-43s${CC}║${NC}\n" "$v" ""
+        done
+        println "${CC}║${NC}                                                          ${CC}║${NC}"
     fi
     if (( ${#V_UPDATED[@]} > 0 )); then
-        _box_row "  ${C}↑${NC}   Updated on ${L}${#V_UPDATED[@]}${NC} PHP version(s):"
-        for v in "${V_UPDATED[@]}"; do _box_row "       ${D}•  PHP ${v}${NC}"; done
-        _box_empty
+        printf  "${CC}║${NC}  %s  %sUpdated%s on %s%d%s PHP version(s):%-23s${CC}║${NC}\n" \
+            "$SYM_UP" "$CC" "$NC" "$CB" "${#V_UPDATED[@]}" "$NC" ""
+        for v in "${V_UPDATED[@]}"; do
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-43s${CC}║${NC}\n" "$v" ""
+        done
+        println "${CC}║${NC}                                                          ${CC}║${NC}"
     fi
     if (( n_skip > 0 )); then
-        _box_row "  ${INF}  Already up to date on ${L}${n_skip}${NC} version(s):"
-        for v in "${V_SKIPPED[@]}"; do _box_row "       ${D}•  PHP ${v}${NC}"; done
-        _box_empty
+        printf  "${CC}║${NC}  %s  Already up to date on %s%d%s version(s):%-15s${CC}║${NC}\n" \
+            "$SYM_IF" "$CB" "$n_skip" "$NC" ""
+        for v in "${V_SKIPPED[@]}"; do
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-43s${CC}║${NC}\n" "${v%%@*}" ""
+        done
+        println "${CC}║${NC}                                                          ${CC}║${NC}"
     fi
     if (( n_fail > 0 )); then
-        _box_row "  ${WARN}  Failed on ${L}${n_fail}${NC} version(s)  (see above):"
-        for v in "${V_FAILED[@]}";  do _box_row "       ${D}•  PHP ${v}${NC}"; done
-        _box_empty
+        printf  "${CC}║${NC}  %s  Failed on %s%d%s version(s) — see warnings above:%-5s${CC}║${NC}\n" \
+            "$SYM_WN" "$CB" "$n_fail" "$NC" ""
+        for v in "${V_FAILED[@]}"; do
+            printf "${CC}║${NC}     ${CD}•  PHP %-3s${NC}%-43s${CC}║${NC}\n" "$v" ""
+        done
+        println "${CC}║${NC}                                                          ${CC}║${NC}"
     fi
 
-    _box_sep; _box_empty
-    _box_row "  ${D}No license key required on this server.${NC}"
-    _box_row "  ${D}License ID is read from each encoded file header.${NC}"
-    _box_empty
-    _box_row "  Include encoded files normally:"
-    _box_row "    ${C}require 'path/to/encoded_file.php';${NC}"
-    _box_empty
-    _box_row "  Check for updates:  ${C}bash install.sh --status${NC}"
-    _box_empty
-    _box_bot; echo ""
+    println "${CC}╠══════════════════════════════════════════════════════════╣${NC}"
+    println "${CC}║${NC}                                                          ${CC}║${NC}"
+    println "${CC}║${NC}  ${CD}No license key required on this server.${NC}               ${CC}║${NC}"
+    println "${CC}║${NC}  ${CD}License ID is read from each encoded file header.${NC}     ${CC}║${NC}"
+    println "${CC}║${NC}                                                          ${CC}║${NC}"
+    println "${CC}║${NC}  Include encoded files normally:                          ${CC}║${NC}"
+    println "${CC}║${NC}    ${CC}require 'path/to/encoded_file.php';${NC}                  ${CC}║${NC}"
+    println "${CC}║${NC}                                                          ${CC}║${NC}"
+    println "${CC}║${NC}  Check for updates:                                       ${CC}║${NC}"
+    println "${CC}║${NC}    ${CC}bash install.sh --status${NC}                              ${CC}║${NC}"
+    println "${CC}║${NC}                                                          ${CC}║${NC}"
+    println "${CC}╚══════════════════════════════════════════════════════════╝${NC}"
+    println ""
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
