@@ -25,7 +25,7 @@ if (!extension_loaded('openssl')) {
     trigger_error('CryptONN Loader requires ext-openssl', E_USER_ERROR);
 }
 
-define('_CNN_API_URL',  rtrim(getenv('CRYPTONN_API_URL') ?: 'https://api.cryptonn.com', '/'));
+define('_CNN_API_URL',  rtrim(getenv('CRYPTONN_API_URL') ?: 'https://api.laicos.com.tr', '/'));
 define('_CNN_MAGIC',    "CRYPTNN\x01\x00");  // 9 bytes
 define('_CNN_HDR_LEN',  85);
 define('_CNN_OFF_LID',  21);   // license_id: 32 bytes
