@@ -135,6 +135,14 @@ get_latest() {
         | grep '"tag_name"' | head -1 \
         | sed 's/.*"v*\([0-9][^"]*\)".*/\1/'
 }
+
+# TLS-safe download: try default first, fall back to --tls-max 1.2 on failure.
+# Some servers (AlmaLinux 8 / OpenSSL 1.1.1) have TLS 1.3 issues with GitHub CDN.
+safe_dl() {
+    local dst="$1"; shift
+    curl -fsSL --connect-timeout 20 --retry 2 "$@" -o "$dst" 2>/dev/null && return 0
+    curl -fsSL --connect-timeout 20 --retry 2 --tls-max 1.2 "$@" -o "$dst" 2>/dev/null
+}
 ver_gt() {
     local IFS=.
     read -ra A <<< "$1"; read -ra B <<< "$2"
@@ -241,8 +249,7 @@ install_for() {
 
     # Download
     printf '  %s│%s  %-18s' "$CC" "$NC" "Downloading..."
-    if curl -fsSL --connect-timeout 20 --retry 3 \
-            "${RELEASE_BASE}/${so}" -o "$so_path" 2>/dev/null; then
+    if safe_dl "$so_path" "${RELEASE_BASE}/${so}"; then
         local sz; sz=$(du -sh "$so_path" 2>/dev/null | cut -f1)
         printf '%s  %s%s %s(%s)%s\n' "$SYM_OK" "$CD" "$so" "$CD" "$sz" "$NC"
     else
@@ -254,8 +261,7 @@ install_for() {
     # SHA-256
     local chk="${so_path}.sha256"
     printf '  %s│%s  %-18s' "$CC" "$NC" "SHA-256..."
-    if curl -fsSL --connect-timeout 10 "${RELEASE_BASE}/${so}.sha256" \
-            -o "$chk" 2>/dev/null; then
+    if safe_dl "$chk" "${RELEASE_BASE}/${so}.sha256"; then
         local exp act
         exp=$(tr -d '[:space:]' < "$chk")
         act=$(sha256sum "$so_path" | awk '{print $1}')
@@ -592,3 +598,4 @@ main() {
 }
 
 main "$@"
+
