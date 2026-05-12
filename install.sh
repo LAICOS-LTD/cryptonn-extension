@@ -144,6 +144,9 @@ safe_dl() {
     curl -fsSL --connect-timeout 20 --retry 2 --tls-max 1.2 "$@" -o "$dst" 2>/dev/null
 }
 ver_gt() {
+    # Guard: non-numeric strings (e.g. "?") compare as lowest possible version
+    [[ "$1" =~ ^[0-9] ]] || return 1
+    [[ "$2" =~ ^[0-9] ]] || return 0
     local IFS=.
     read -ra A <<< "$1"; read -ra B <<< "$2"
     local i
