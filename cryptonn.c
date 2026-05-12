@@ -899,6 +899,142 @@ static int cnn_get_master_key(const char *license_id, unsigned char out[32]) {
     return 0;
 }
 
+/* ── Vendor product master key (3-layer cache) ────────────────────────────── */
+/* Same caching strategy as cnn_get_master_key but keyed on product_id.      */
+/* Cache path prefix _cnn_vp_ distinguishes from license cache _cnn_mk_.     */
+static char *cnn_api_vendor_fetch(const char *pid_upper, const char *fingerprint) {
+    const char *api_url_env = getenv("CRYPTONN_API_URL");
+    char url[512];
+    snprintf(url, sizeof(url), "%s/v1/vendor-key/fetch",
+             api_url_env ? api_url_env : CNN_API_DEFAULT);
+
+    char post[512];
+    snprintf(post, sizeof(post),
+        "{\"product_id\":\"%s\",\"server_fingerprint\":\"%s\",\"loader_version\":\"%s\"}",
+        pid_upper, fingerprint, CNN_LOADER_VER);
+
+    cnn_buf_t resp = {NULL, 0, 0};
+
+    CURL *ch = curl_easy_init();
+    if (!ch) return NULL;
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    char ua[128];
+    snprintf(ua, sizeof(ua), "CryptONN-Ext/%s PHP/%s", PHP_CRYPTONN_VERSION, PHP_VERSION);
+
+    curl_easy_setopt(ch, CURLOPT_URL,            url);
+    curl_easy_setopt(ch, CURLOPT_POSTFIELDS,     post);
+    curl_easy_setopt(ch, CURLOPT_HTTPHEADER,     headers);
+    curl_easy_setopt(ch, CURLOPT_USERAGENT,      ua);
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT,        CNN_API_TIMEOUT);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION,  curl_write_cb);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA,      &resp);
+    curl_easy_setopt(ch, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(ch, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    CURLcode rc = curl_easy_perform(ch);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(ch);
+
+    if (rc != CURLE_OK) {
+        if (resp.buf) free(resp.buf);
+        return NULL;
+    }
+    return resp.buf;
+}
+
+static void cnn_vp_cache_path(const char *pid_upper, char out[256]) {
+    unsigned char digest[32];
+    cnn_sha256(pid_upper, strlen(pid_upper), digest);
+    char hex[65];
+    for (int i = 0; i < 32; i++) sprintf(hex + i*2, "%02x", digest[i]);
+    hex[64] = '\0';
+    snprintf(out, 256, "%s/_cnn_vp_%.16s.json", P_tmpdir ? P_tmpdir : "/tmp", hex);
+}
+
+static int cnn_get_vendor_master_key(const char *product_id, unsigned char out[32]) {
+    /* Normalise to upper-case (max 40 chars for PROD-YYYY-XXXXXX) */
+    char pid[41] = {0};
+    for (int i = 0; i < 40 && product_id[i]; i++)
+        pid[i] = (char)toupper((unsigned char)product_id[i]);
+
+    /* Layer 1: in-process cache (reuse license proc_cache — namespaces don't collide) */
+    const char *cached = proc_cache_get(pid);
+    if (cached) {
+        memcpy(out, cached, 32);
+        return 1;
+    }
+
+    char fp[65];
+    cnn_fingerprint(fp);
+
+    /* delivery_key = SHA-256(pid_upper + "|" + fingerprint) */
+    unsigned char delivery_key[32];
+    cnn_delivery_key(pid, fp, delivery_key);
+
+    unsigned char machine_secret[32];
+    cnn_machine_secret(machine_secret);
+
+    unsigned char cache_key[32];
+    cnn_cache_protect_key(machine_secret, pid, fp, cache_key);
+
+    char cache_path[256];
+    cnn_vp_cache_path(pid, cache_path);
+
+    /* Layer 2: file cache (fresh <= 24 h) */
+    int trial_expired = 0;
+    if (cnn_file_cache_read(cache_path, delivery_key, cache_key, out, &trial_expired, 0)) {
+        proc_cache_set(pid, (char *)out);
+        return 1;
+    }
+
+    /* Layer 3: API call */
+    char *resp = cnn_api_vendor_fetch(pid, fp);
+    if (resp) {
+        if (strstr(resp, "\"ok\":true") || strstr(resp, "\"ok\": true")) {
+            const char *bk = strstr(resp, "\"customer_key\"");
+            if (bk) {
+                const char *bstart = strchr(bk + strlen("\"customer_key\""), '{');
+                if (bstart) {
+                    int depth = 0;
+                    const char *bend = bstart;
+                    while (*bend) {
+                        if (*bend == '{') depth++;
+                        else if (*bend == '}') { depth--; if (depth == 0) { bend++; break; } }
+                        bend++;
+                    }
+                    int bundle_len = (int)(bend - bstart);
+                    char *bundle_json = malloc(bundle_len + 1);
+                    if (bundle_json) {
+                        memcpy(bundle_json, bstart, bundle_len);
+                        bundle_json[bundle_len] = '\0';
+                        if (cnn_parse_and_decrypt_bundle(bundle_json, delivery_key, "", out)) {
+                            cnn_file_cache_write(cache_path, bundle_json, 0, cache_key);
+                            proc_cache_set(pid, (char *)out);
+                            free(bundle_json);
+                            free(resp);
+                            return 1;
+                        }
+                        free(bundle_json);
+                    }
+                }
+            }
+        }
+        free(resp);
+        return 0;
+    }
+
+    /* Grace: API unreachable, stale cache <= 72 h */
+    if (cnn_file_cache_read(cache_path, delivery_key, cache_key, out, &trial_expired, 1)) {
+        proc_cache_set(pid, (char *)out);
+        return 1;
+    }
+
+    return 0;
+}
+
 /* ── File-key derivation: BLAKE2b-256 MAC ─────────────────────────────────── */
 /* Mirrors Rust: crypto_generichash("cryptonn:v1:{lid}:{basename}", mk, 32)  */
 static int cnn_derive_file_key(
@@ -1388,12 +1524,30 @@ PHP_FUNCTION(cnn_load)
     }
     fclose(fp);
 
+    /* Determine key_id: vendor product_id takes precedence over header license_id */
+    char pid_upper[41] = {0};
+    int use_vendor_key = (product_id_len > 0);
+    if (use_vendor_key) {
+        for (size_t i = 0; i < product_id_len && i < 40; i++)
+            pid_upper[i] = (char)toupper((unsigned char)product_id[i]);
+    }
+    const char *key_id = use_vendor_key ? pid_upper : license_id;
+
     unsigned char master_key[32];
-    if (!cnn_get_master_key(license_id, master_key)) {
-        free(ciphertext);
-        zend_error(E_ERROR, "CryptONN: Key unavailable (license: %s) — %s",
-                   license_id, filename);
-        return;
+    if (use_vendor_key) {
+        if (!cnn_get_vendor_master_key(pid_upper, master_key)) {
+            free(ciphertext);
+            zend_error(E_ERROR, "CryptONN: Key unavailable (product: %s) — %s",
+                       pid_upper, filename);
+            return;
+        }
+    } else {
+        if (!cnn_get_master_key(license_id, master_key)) {
+            free(ciphertext);
+            zend_error(E_ERROR, "CryptONN: Key unavailable (license: %s) — %s",
+                       license_id, filename);
+            return;
+        }
     }
 
     const char *bname = strrchr(filename, '/');
@@ -1404,7 +1558,7 @@ PHP_FUNCTION(cnn_load)
 #endif
 
     unsigned char file_key[32];
-    if (!cnn_derive_file_key(license_id, bname, master_key, file_key)) {
+    if (!cnn_derive_file_key(key_id, bname, master_key, file_key)) {
         free(ciphertext);
         zend_error(E_ERROR, "CryptONN: Key derivation failed — %s", filename);
         return;
