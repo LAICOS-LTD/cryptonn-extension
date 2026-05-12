@@ -18,6 +18,7 @@
 #    --update     Check for a newer version and upgrade if available
 #    --uninstall  Remove the extension from all PHP versions
 #    --status     Show installation status for each PHP version
+#    --restart-fpm  Restart all PHP-FPM services (Plesk / cPanel / bare)
 #    --help       Show this help
 #
 #  Options:
@@ -91,6 +92,7 @@ while [[ $# -gt 0 ]]; do
         --php|-p)      FORCE_PHP="$2";  shift 2 ;;
         --dir|-d)      INSTALL_DIR="$2";shift 2 ;;
         --yes|-y)      AUTO_YES=1;      shift ;;
+        --restart-fpm|-r) CMD="restart-fpm"; shift ;;
         --help|-h)
             sed -n '2,30p' "$0" | sed 's/^# \?//; s/^#//'
             exit 0 ;;
@@ -310,10 +312,17 @@ install_for() {
     (( was )) && V_UPDATED+=("$ver") || V_FRESH+=("$ver")
 }
 
-# ── Restart Plesk FPM ─────────────────────────────────────────────────────────
-restart_plesk_fpm() {
-    sec "Restarting Plesk PHP-FPM services"
-    local n=0
+# ── Restart PHP-FPM (all panels) ─────────────────────────────────────────────
+restart_fpm() {
+    sec "Restarting PHP-FPM services"
+    local pattern n=0
+    case "$PANEL" in
+        plesk)       pattern='plesk-php.*-fpm' ;;
+        cpanel)      pattern='ea-php.*-php-fpm' ;;
+        directadmin) pattern='php.*-fpm' ;;
+        *)           pattern='php.*-fpm' ;;
+    esac
+
     while IFS= read -r svc; do
         [[ -n "$svc" ]] || continue
         printf '     %-48s' "$svc"
@@ -323,8 +332,8 @@ restart_plesk_fpm() {
             printf '%s failed\n' "$SYM_WN"
         fi
     done < <(systemctl list-units --type=service --state=active --no-legend 2>/dev/null \
-             | awk '{print $1}' | grep -E 'plesk-php.*-fpm' || true)
-    (( n == 0 )) && warn "No active plesk-php*-fpm services — restart FPM manually."
+             | awk '{print $1}' | grep -E "$pattern" || true)
+    (( n == 0 )) && warn "No active PHP-FPM services matched — restart FPM manually."
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,7 +397,7 @@ cmd_uninstall() {
     done < <(each_php)
     (( n == 0 )) && warn "No PHP binaries found."
     ver_delete
-    case "$PANEL" in plesk) restart_plesk_fpm ;; esac
+    restart_fpm
 
     println ""
     println "${CC}╔══════════════════════════════════════════════════════════╗${NC}"
@@ -488,7 +497,7 @@ cmd_install() {
     (( n == 0 )) && die "No PHP binaries found. Use --php /path/to/php"
 
     [[ -n "$lat" ]] && ver_write "$lat"
-    case "$PANEL" in plesk) restart_plesk_fpm ;; esac
+    restart_fpm
 }
 
 # ── Verification table ────────────────────────────────────────────────────────
@@ -587,9 +596,21 @@ print_summary() {
     println ""
 }
 
+# ── Standalone FPM restart ────────────────────────────────────────────────────
+cmd_restart_fpm() {
+    [[ $EUID -eq 0 ]] || die "Must be run as root (or with sudo)."
+    PANEL=$(detect_panel)
+    restart_fpm
+    println ""
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
     print_header
+    if [[ "$CMD" == "restart-fpm" ]]; then
+        cmd_restart_fpm
+        return
+    fi
     preflight
     case "$CMD" in
         status)    cmd_status ;;
