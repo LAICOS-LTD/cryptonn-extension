@@ -266,7 +266,7 @@ install_for() {
     printf '  %s│%s  %-18s' "$CC" "$NC" "SHA-256..."
     if safe_dl "$chk" "${RELEASE_BASE}/${so}.sha256"; then
         local exp act
-        exp=$(tr -d '[:space:]' < "$chk")
+        exp=$(awk 'NR==1{print $1}' "$chk")
         act=$(sha256sum "$so_path" | awk '{print $1}')
         rm -f "$chk"
         if [[ "$exp" == "$act" ]]; then
